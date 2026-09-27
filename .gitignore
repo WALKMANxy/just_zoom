@@ -6,10 +6,10 @@ framing/
 docs/
 scripts/
 AGENTS.md
-index.html
-index_netflix.html
-index_prime.html
-index_disney.html
-index_youtube.html
-index*.html
+/index.html
+/index_netflix.html
+/index_prime.html
+/index_disney.html
+/index_youtube.html
+/index*.html
 *.log

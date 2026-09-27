@@ -2,7 +2,7 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   zip: {
-    excludeSources: ['**/artifacts/**', '**/framing/**', '**/docs/**', '**/scripts/**', '**/store_media/**', '**/AGENTS.md', '**/index*.html'],
+    excludeSources: ['**/artifacts/**', '**/framing/**', '**/docs/**', '**/scripts/**', '**/store_media/**', '**/AGENTS.md', 'index*.html'],
   },
   manifest: {
     name: 'just_zoom',
