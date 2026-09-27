@@ -1,0 +1,4 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": { "strict": true, "noUncheckedIndexedAccess": true, "types": ["chrome"], "lib": ["ES2022", "DOM", "DOM.Iterable"] }
+}

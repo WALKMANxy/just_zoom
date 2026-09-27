@@ -1,0 +1,25 @@
+{
+  "name": "just-zoom",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "build:safari": "wxt build -b safari",
+    "build:all": "wxt build -b chrome && wxt build -b firefox && wxt build -b safari",
+    "zip": "wxt zip",
+    "zip:all": "wxt zip -b chrome && wxt zip -b firefox && wxt zip -b safari",
+    "typecheck": "tsc --noEmit",
+    "check:detector": "tsx scripts/check-detector.ts",
+    "check:browser": "node scripts/smoke-browser.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.0",
+    "typescript": "7.0.2",
+    "wxt": "0.21.4",
+    "tsx": "4.23.13"
+  }
+}
