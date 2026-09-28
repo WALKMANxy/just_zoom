@@ -65,6 +65,7 @@ const settingsStatus = document.querySelector<HTMLElement>('#settings-status')!;
 const settingsSaveBtn = document.querySelector<HTMLButtonElement>('#settings-save-btn')!;
 const settingsResetBtn = document.querySelector<HTMLButtonElement>('#settings-reset-btn')!;
 const videoFinderModeSelect = document.querySelector<HTMLSelectElement>('#setting-videoFinderMode')!;
+const nativeHtml5WorkaroundCheckbox = document.querySelector<HTMLInputElement>('#setting-nativeHtml5Workaround')!;
 const displayProfileSelect = document.querySelector<HTMLSelectElement>('#setting-displayProfile')!;
 const customRatioGroup = document.querySelector<HTMLElement>('#custom-ratio-group')!;
 const customRatioInput = document.querySelector<HTMLInputElement>('#setting-customDisplayAspectRatio')!;
@@ -179,6 +180,7 @@ function applySettingsToForm(settings: Settings) {
   updateZoomDisplay();
   ambienceSelect.value = settings.ambience;
   videoFinderModeSelect.value = settings.videoFinderMode || 'treewalker';
+  nativeHtml5WorkaroundCheckbox.checked = settings.nativeHtml5Workaround ?? true;
 }
 
 function readSettingsFromForm(): Settings {
@@ -200,6 +202,7 @@ function readSettingsFromForm(): Settings {
     zoom: Number.parseFloat(zoomSlider.value) || 1.34,
     ambience: ambienceSelect.value as 'off' | 'soft' | 'full',
     videoFinderMode: (videoFinderModeSelect.value as 'treewalker' | 'bruteforce') || 'treewalker',
+    nativeHtml5Workaround: nativeHtml5WorkaroundCheckbox.checked,
   };
 }
 

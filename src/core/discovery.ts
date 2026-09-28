@@ -6,7 +6,7 @@ const CONTROLS_SELECTOR = 'button, [role="button"], .vjs-control, .jw-icon, .ply
 const BACKGROUND_PATTERN = /\b(?:bg|background|hero|banner|ambient|decorative|looping)[-_]video\b/i;
 
 export function isBackgroundVideo(video: HTMLVideoElement, style: CSSStyleDeclaration): boolean {
-  if (video.controls || video.hasAttribute('controls')) return false;
+  if (video.controls || video.hasAttribute('controls') || video.hasAttribute('data-jz-native')) return false;
   if (video.mediaKeys) return false;
   const service = services.find(item => item.host.test(location.hostname));
   const player = Boolean(video.closest(genericPlayer) || (service && video.closest(service.player)));
@@ -79,7 +79,7 @@ export function isEligibleVideo(video: HTMLVideoElement): boolean {
   }
 
   // Check if it has native HTML5 player controls
-  if (video.controls || video.hasAttribute('controls')) {
+  if (video.controls || video.hasAttribute('controls') || video.hasAttribute('data-jz-native') || video.parentElement?.classList.contains('jz-native-player')) {
     return true;
   }
 

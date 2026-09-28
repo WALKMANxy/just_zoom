@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, EMPTY_CROP, type AspectRatioBucket, type Crop, type FeatureStatus, type PlayerBinding, type PlayerControls, type RuntimeSnapshot, type Settings, type ZoomAction } from '../shared/types';
 import { eraseSettings, isContextInvalidationError, isContextValid, loadSettings, markContextInvalid, normalizeSettings, saveGlobalSettings, saveSiteSettings, subscribeSettings } from '../shared/storage';
 import { createControls } from '../ui/controls';
+import { createNativePlayer, type NativePlayerController } from '../ui/native-player';
 import { EffectsController } from '../features/effects';
 import { bindPlayer, disneyControlRoots } from './adapters';
 import { isNotExcludedURL, selectVideo } from './discovery';
@@ -19,6 +20,7 @@ export function startRuntime(): () => void {
   let transform: TransformEngine | null = null;
   let gestures: GesturesController | null = null;
   let hud: HudController | null = null;
+  let nativePlayer: NativePlayerController | null = null;
   let effects: EffectsController | null = null;
   let crop: Crop = { ...EMPTY_CROP };
   let generation = 0, disposed = false, scheduled = 0;
@@ -81,7 +83,39 @@ export function startRuntime(): () => void {
       effects?.dispose(); effects = null; transform?.dispose(); transform = null;
       gestures?.dispose(); gestures = null;
       hud?.dispose(); hud = null;
+      if (nativePlayer) {
+        nativePlayer.dispose();
+        nativePlayer = null;
+        if (binding) {
+          geometryObserver?.disconnect();
+          geometryObserver = new ResizeObserver(() => update());
+          geometryObserver.observe(binding.viewport);
+          geometryObserver.observe(binding.video);
+        }
+      }
       status = { source: 'idle', message: blocked ? 'Portrait video or player: visual processing paused. Allow portrait to apply.' : 'Disabled on this player. Enable to resume.' }; updateControls(); return;
+    }
+    if (binding.adapter === 'Native HTML5' && settings.nativeHtml5Workaround) {
+      if (!nativePlayer) {
+        nativePlayer = createNativePlayer(binding, {
+          patch, reset, resetPan, action, activate,
+          saveSite: () => { void save('site'); },
+          saveGlobal: () => { void save('global'); },
+        });
+        geometryObserver?.disconnect();
+        geometryObserver = new ResizeObserver(() => update());
+        geometryObserver.observe(binding.viewport);
+        geometryObserver.observe(binding.video);
+      } else {
+        nativePlayer.update(settings);
+      }
+    } else if (nativePlayer) {
+      nativePlayer.dispose();
+      nativePlayer = null;
+      geometryObserver?.disconnect();
+      geometryObserver = new ResizeObserver(() => update());
+      geometryObserver.observe(binding.viewport);
+      geometryObserver.observe(binding.video);
     }
     if (!transform) transform = new TransformEngine(binding);
     if (!hud) hud = createHud(binding);
@@ -271,6 +305,7 @@ export function startRuntime(): () => void {
     gestures?.dispose(); gestures = null;
     hud?.dispose(); hud = null;
     effects?.dispose(); transform?.dispose(); controls?.dispose();
+    nativePlayer?.dispose(); nativePlayer = null;
     effects = null; transform = null; controls = null; binding = null; crop = { ...EMPTY_CROP };
     report();
   };
@@ -401,6 +436,7 @@ export function startRuntime(): () => void {
       }
       binding = fresh;
       if (viewportChanged) {
+        nativePlayer?.rebind(fresh);
         transform?.rebind(fresh);
         gestures?.dispose(); gestures = null;
         hud?.rebind(fresh);
@@ -452,7 +488,7 @@ export function startRuntime(): () => void {
     scheduled = window.setTimeout(discover, immediate ? 0 : 200);
   };
   const isOwnedNode = (node: Node) => node instanceof Element
-    && (node.matches('.jz-controls-host,[data-just-zoom="ambience"]') || !!node.closest('.jz-controls-host'));
+    && (node.matches('.jz-controls-host,.jz-native-player,[data-just-zoom="ambience"]') || !!node.closest('.jz-controls-host,.jz-native-player'));
   const syncDisneyControlObserver = () => {
     if (!/(^|\.)disneyplus\.com$/.test(hostname)) return;
     const roots = disneyControlRoots();

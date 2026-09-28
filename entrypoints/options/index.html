@@ -256,8 +256,19 @@
           <li><strong>Disney+</strong> — Native in-player button</li>
         </ul>
 
+        <h2 style="margin-top: 28px;">HTML5 Native Video Controls Workaround</h2>
+        <p class="hint">Standard browser <code>&lt;video controls&gt;</code> players scale their built-in controls when CSS transforms are applied to the video element, causing the toolbar to be pushed off-screen at higher zoom levels and breaking in fullscreen due to browser top-layer occlusion. <strong>just_zoom</strong> provides a native HTML5 workaround that isolates the video in an unscaled Shadow DOM player container with a 1:1 pixel-faithful controls bar:</p>
+        <ul class="players-list">
+          <li><strong>Playback &amp; Timeline:</strong> Play/Pause/Replay toggle, precision scrub timeline with buffered progress, and hover timestamp preview.</li>
+          <li><strong>Audio Controls:</strong> Upward vertical volume slider with mute toggle and volume persistence.</li>
+          <li><strong>Speed &amp; PiP:</strong> 3-dots menu with speed selection (0.25× to 2×) and Picture-in-Picture.</li>
+          <li><strong>Video Download:</strong> Native download action in the 3-dots menu for accessible media streams.</li>
+          <li><strong>Fullscreen Fix:</strong> Container-level fullscreen that keeps controls and overlays accessible without top-layer clipping.</li>
+          <li><strong>Shortcuts &amp; Auto-Hide:</strong> Space/K for play, arrows for scrub/volume, F for fullscreen, M for mute, and cursor auto-suppression on idle.</li>
+        </ul>
+
         <h2 style="margin-top: 28px;">Generic HTML5 &amp; Other Players</h2>
-        <p class="hint">For generic HTML5 video players (such as standard <code>&lt;video controls&gt;</code>, Video.js, Plyr, JW Player, Shaka) and services without dedicated adapters, just_zoom automatically provides the non-intrusive floating popup button. This ensures zoom and framing controls are always readily accessible without risking layout collisions or breaking custom player toolbars.</p>
+        <p class="hint">For generic player frameworks (such as Video.js, Plyr, JW Player, Shaka) and streaming sites without dedicated adapters, just_zoom automatically provides the non-intrusive floating popup button. This ensures zoom and framing controls are always readily accessible without risking layout collisions or breaking custom player toolbars.</p>
 
         <h2 style="margin-top: 28px;">Ambience Lighting</h2>
         <p class="hint">Ambience currently works on non-DRM protected videos (such as YouTube and standard HTML5 video). Hardware DRM on platforms like Netflix, Disney+, and Prime Video prevents direct frame sampling, so Ambience remains inactive on those streams.</p>
@@ -284,6 +295,21 @@
         <p class="hint">
           <strong>TreeWalker (Recommended):</strong> Uses browser-native C++ pointer traversal to find open shadow roots without allocating large JavaScript arrays. Ideal for complex single-page apps.<br>
           <strong>Brute-Force:</strong> Scans every element in the document tree using <code>querySelectorAll('*')</code>. Kept as an experimental fallback in case a non-standard or deeply wrapped Web Component player is not discovered.
+        </p>
+      </article>
+
+      <article class="settings-card" style="grid-column: 1 / -1; max-width: 800px; margin-top: 20px;">
+        <h2>HTML5 Native Video Controls Workaround</h2>
+        <p class="hint">Replaces standard browser <code>&lt;video controls&gt;</code> with an unscaled, pixel-faithful Shadow DOM controls bar. This prevents player controls from zooming off-screen at high zoom levels and resolves Chromium fullscreen top-layer occlusion bugs.</p>
+
+        <div class="toggles-list" style="margin-top: 12px;">
+          <label class="check">
+            <input type="checkbox" id="setting-nativeHtml5Workaround">
+            <span><strong>Enable HTML5 native player controls workaround (Recommended)</strong></span>
+          </label>
+        </div>
+        <p class="hint" style="margin-top: 8px;">
+          When enabled (default), standalone HTML5 video elements get clean, unzoomed player controls with full feature parity (timeline scrubber, vertical volume slider, playback speed, Picture-in-Picture, and video download where permitted). When disabled, just_zoom leaves the browser's native controls untouched and falls back to the floating popup button.
         </p>
 
         <div class="settings-actions" style="margin-top: 24px; display: flex; align-items: center; gap: 16px;">

@@ -50,6 +50,15 @@ export default defineBackground(() => {
     if (message.type === 'JZ_OPEN_OPTIONS' && sender.id === chrome.runtime.id) {
       void chrome.runtime.openOptionsPage(); respond({ ok: true }); return;
     }
+    if (message.type === 'JZ_DOWNLOAD_VIDEO' && sender.id === chrome.runtime.id && typeof message.url === 'string') {
+      const filename = typeof message.filename === 'string' ? message.filename : 'video.mp4';
+      chrome.downloads.download({
+        url: message.url,
+        filename,
+        saveAs: false,
+      }).then(id => respond({ ok: true, id })).catch(err => respond({ ok: false, error: String(err) }));
+      return true;
+    }
     if (message.type === 'JZ_SHORTCUT' && sender.id === chrome.runtime.id && sender.tab?.id !== undefined) {
       void target().then(t => {
         if (t && t.tabId === sender.tab!.id) return chrome.tabs.sendMessage(t.tabId, { type: 'JZ_ACTION', action: message.action }, { frameId: t.frameId });

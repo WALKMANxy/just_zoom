@@ -46,6 +46,7 @@ export function normalizeSettings(value: Partial<Settings> | unknown, base: Sett
       ? (v.displayProfile! as DisplayProfile)
       : base.displayProfile,
     customDisplayAspectRatio: clamp(v.customDisplayAspectRatio, base.customDisplayAspectRatio, 1, 4),
+    nativeHtml5Workaround: typeof v.nativeHtml5Workaround === 'boolean' ? v.nativeHtml5Workaround : base.nativeHtml5Workaround,
   };
 }
 let contextInvalid = false;

@@ -29,6 +29,7 @@ export interface Settings {
   hudEnabled: boolean;
   displayProfile: DisplayProfile;
   customDisplayAspectRatio: number;
+  nativeHtml5Workaround: boolean;
 }
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true, animations: true, controlMode: 'native', buttonAction: 'zoom-in', buttonUseLast: true, buttonFactor: 1.34,
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hudEnabled: false,
   displayProfile: 'auto',
   customDisplayAspectRatio: 2.39,
+  nativeHtml5Workaround: true,
 };
 export interface PlayerBinding {
   video: HTMLVideoElement;

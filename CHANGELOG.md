@@ -2,6 +2,25 @@
 
 All notable changes to **just_zoom** are documented in this file.
 
+## [0.6.0] - 2026-09-28
+
+### Added
+- **Native HTML5 Player Controls Workaround**:
+  - Replaces standard `<video controls>` with an unscaled, pixel-faithful Shadow DOM controls bar that remains visible and interactive regardless of zoom factor or pan offset.
+  - Complete control suite: Play/Pause/Replay, scrub timeline with buffered progress and hover preview, upward vertical volume slider popup with mute toggle, dedicated `just_zoom` button, and 3-dots options menu.
+  - 3-dots menu features: Playback speed selection (0.25× to 2×), Picture-in-Picture, and Video Download for accessible media streams via background service worker with fallback.
+  - Container-level fullscreen support that fixes Chromium top-layer occlusion bugs, keeping controls and overlays visible.
+  - Keyboard shortcut navigation (Space/K, arrows, F, M) and idle cursor/bar auto-suppression.
+- **Experimental Settings Toggle**:
+  - Added "HTML5 native player controls workaround" setting under the Experimental tab, enabled by default, with complete toggle support and seamless fallback to generic floating controls.
+- **Background Downloads Permission**: Added Chromium `downloads` permission to handle cross-origin video downloads cleanly without CORS rejection.
+
+### Fixed
+- **Player Lifecycle & Disable Restoration**:
+  - Fixed a lifecycle bug where disabling `just_zoom` caused the native controls to flash for a split second before vanishing. Decoupled DOM wrapping from the discovery pass, ensuring native controls are cleanly restored and stay active when disabled.
+- **Layout Sliver Padding**:
+  - Fixed an 18px baseline descender spacing issue on standalone video elements when not in fullscreen.
+
 ## [0.5.0] - 2026-09-27
 
 ### Added

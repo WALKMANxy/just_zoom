@@ -1,4 +1,5 @@
 import type { PlayerBinding } from '../shared/types';
+import { isNativeControlsVideo } from '../ui/native-player';
 
 export interface AdapterSpec { name: string; host: RegExp; player: string; fullscreen: string }
 export const services: AdapterSpec[] = [
@@ -229,8 +230,14 @@ export function bindPlayer(video: HTMLVideoElement, previous?: PlayerBinding): P
   const serviceRoot = service ? (video.parentElement?.closest<HTMLElement>(service.player) ?? video.closest<HTMLElement>(service.player)) : null;
   const stackRoot = video.parentElement?.closest<HTMLElement>(genericPlayer) ?? video.closest<HTMLElement>(genericPlayer);
   const player = (serviceRoot && serviceRoot !== video ? serviceRoot : null) ?? (stackRoot && stackRoot !== video ? stackRoot : null);
-  let viewport = player ?? (video.parentElement && video.parentElement !== document.body && video.parentElement !== document.documentElement ? video.parentElement : video);
-  if (viewport === document.body || viewport === document.documentElement) viewport = video;
+  const isNative = !service && !stackRoot && isNativeControlsVideo(video);
+  let viewport: HTMLElement;
+  if (isNative && video.parentElement?.classList.contains('jz-native-player')) {
+    viewport = video.parentElement;
+  } else {
+    viewport = player ?? (video.parentElement && video.parentElement !== document.body && video.parentElement !== document.documentElement ? video.parentElement : video);
+    if (viewport === document.body || viewport === document.documentElement) viewport = video;
+  }
 
   // Only attempt native in-player toolbar injection for tested & verified services.
   // Untested services and generic stacks fall back to the floating popup controls.

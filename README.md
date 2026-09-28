@@ -17,7 +17,8 @@ Built with Manifest V3 and WXT. Runs 100% locally in your browser with no accoun
 - **Action HUD:** Subtle pill in the player corner showing current zoom multiplier and pan offset during gestures.
 - **Player controls:**
   - Integrated in-player button for tested services: YouTube, Netflix, Prime Video, and Disney+.
-  - Floating player panel and browser toolbar popup for all other video platforms and generic HTML5 players.
+  - Dedicated **HTML5 Native Player Workaround**: Replaces standard browser `<video controls>` with an unscaled, pixel-faithful Shadow DOM controls bar so controls never zoom off-screen or occlude in fullscreen. Includes timeline scrubber, upward volume slider, 3-dots menu (speed, PiP, download), keyboard shortcuts, and idle auto-hide.
+  - Floating player panel and browser toolbar popup for all other video platforms and generic HTML5 player frameworks.
 - **Ambience backdrops (non-DRM video):** Optional soft or full blurred background lighting matching video colors on standard HTML5 players.
 
 ---
