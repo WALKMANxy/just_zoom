@@ -4,7 +4,10 @@ export type ZoomType = 'quick' | 'factor';
 export type VideoFinderMode = 'treewalker' | 'bruteforce';
 export type GestureModifier = 'alt' | 'ctrl' | 'shift' | 'meta';
 export type DisplayProfile = 'auto' | '16:9' | '16:10' | '21:9' | '32:9' | 'custom';
-export type Language = 'auto' | 'en' | 'de' | 'ja' | 'es' | 'fr' | 'pt_BR' | 'zh_CN' | 'ko' | 'it' | 'ru' | 'pl' | 'nl' | 'zh_TW';
+export const VALID_LANGUAGES = [
+  'auto', 'en', 'de', 'ja', 'es', 'fr', 'pt_BR', 'zh_CN', 'ko', 'it', 'ru', 'pl', 'nl', 'zh_TW', 'tr', 'uk', 'vi', 'id', 'cs',
+] as const;
+export type Language = (typeof VALID_LANGUAGES)[number];
 export interface Settings {
   enabled: boolean;
   controlMode: 'native' | 'floating' | 'both';

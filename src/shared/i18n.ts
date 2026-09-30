@@ -11,9 +11,15 @@ import ruMessages from '../../locales/ru.json';
 import plMessages from '../../locales/pl.json';
 import nlMessages from '../../locales/nl.json';
 import zhTwMessages from '../../locales/zh_TW.json';
+import trMessages from '../../locales/tr.json';
+import ukMessages from '../../locales/uk.json';
+import viMessages from '../../locales/vi.json';
+import idMessages from '../../locales/id.json';
+import csMessages from '../../locales/cs.json';
 import type { GeneratedI18nStructure } from '../../.wxt/i18n/structure';
 
-export type Language = 'auto' | 'en' | 'de' | 'ja' | 'es' | 'fr' | 'pt_BR' | 'zh_CN' | 'ko' | 'it' | 'ru' | 'pl' | 'nl' | 'zh_TW';
+import type { Language } from './types';
+export type { Language };
 
 export const SUPPORTED_LANGUAGES: { value: Language; label: string }[] = [
   { value: 'auto', label: 'Auto (Browser default)' },
@@ -30,6 +36,11 @@ export const SUPPORTED_LANGUAGES: { value: Language; label: string }[] = [
   { value: 'pl', label: 'Polski' },
   { value: 'nl', label: 'Nederlands' },
   { value: 'zh_TW', label: '繁體中文' },
+  { value: 'tr', label: 'Türkçe' },
+  { value: 'uk', label: 'Українська' },
+  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'id', label: 'Bahasa Indonesia' },
+  { value: 'cs', label: 'Čeština' },
 ];
 
 const DICTIONARIES: Record<Exclude<Language, 'auto'>, Record<string, string>> = {
@@ -46,6 +57,11 @@ const DICTIONARIES: Record<Exclude<Language, 'auto'>, Record<string, string>> = 
   pl: plMessages,
   nl: nlMessages,
   zh_TW: zhTwMessages,
+  tr: trMessages,
+  uk: ukMessages,
+  vi: viMessages,
+  id: idMessages,
+  cs: csMessages,
 };
 
 let currentLanguage: Language = 'auto';
