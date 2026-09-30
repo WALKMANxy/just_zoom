@@ -261,6 +261,6 @@ export function bindPlayer(video: HTMLVideoElement, previous?: PlayerBinding): P
       : service?.name === 'Disney+' ? 'control'
       : service?.name === 'Prime Video' ? point?.before.className || anchor?.className
       : anchor?.className,
-    adapter: service?.name ?? (stackRoot ? 'Generic HTML5' : 'Native HTML5'),
+    adapter: service?.name ?? (isNative ? 'Native HTML5' : 'Generic HTML5'),
   };
 }

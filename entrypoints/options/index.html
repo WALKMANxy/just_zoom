@@ -361,6 +361,18 @@
           When enabled (default), standalone HTML5 video elements get clean, unzoomed player controls with full feature parity (timeline scrubber, vertical volume slider, playback speed, Picture-in-Picture, and video download where permitted). When disabled, just_zoom leaves the browser's native controls untouched and falls back to the floating popup button.
         </p>
 
+        <div style="margin-top: 16px;">
+          <label for="setting-nativePlayerSkin"><span data-i18n="options_experimental_native_skin_title">Native player skin</span>
+            <select id="setting-nativePlayerSkin">
+              <option value="classic" data-i18n="options_experimental_skin_classic">Classic (Chromium Dark Minimal)</option>
+              <option value="liquid-glass" data-i18n="options_experimental_skin_liquid_glass">Liquid Glass Inspired</option>
+            </select>
+          </label>
+          <p class="hint" data-i18n="options_experimental_native_skin_desc" style="margin-top: 4px;">
+            Choose the visual skin for the native player workaround.
+          </p>
+        </div>
+
         <div class="settings-actions" style="margin-top: 24px; display: flex; align-items: center; gap: 16px;">
           <button type="button" id="experimental-save-btn" class="primary-btn" data-i18n="options_experimental_save_btn">Save Experimental Settings</button>
           <span id="experimental-status" class="status-msg"></span>

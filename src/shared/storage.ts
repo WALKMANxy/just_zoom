@@ -54,6 +54,7 @@ export function normalizeSettings(value: Partial<Settings> | unknown, base: Sett
       : base.displayProfile,
     customDisplayAspectRatio: clamp(v.customDisplayAspectRatio, base.customDisplayAspectRatio, 1, 4),
     nativeHtml5Workaround: typeof v.nativeHtml5Workaround === 'boolean' ? v.nativeHtml5Workaround : base.nativeHtml5Workaround,
+    nativePlayerSkin: v.nativePlayerSkin === 'liquid-glass' ? 'liquid-glass' : v.nativePlayerSkin === 'classic' ? 'classic' : base.nativePlayerSkin,
     language: (VALID_LANGUAGES as readonly string[]).includes(v.language as string) ? (v.language as Language) : base.language,
   };
 }
@@ -129,6 +130,7 @@ export async function saveSiteSettings(host: string, settings: Settings, bucket?
   if (!isContextValid()) return;
   const sitePayload = normalizeSettings(settings);
   delete (sitePayload as Partial<Settings>).enabled;
+  delete (sitePayload as Partial<Settings>).nativePlayerSkin;
   try {
     const result = await chrome.runtime.sendMessage({ type: 'JZ_STORE', scope: 'site', host, settings: sitePayload, bucket });
     if (!result?.ok) throw new Error(result?.error || 'Could not save settings');
@@ -194,6 +196,7 @@ export async function writeSettings(scope: 'global' | 'site', host: string, sett
     } else {
       const siteSettings = normalizeSettings(settings);
       delete (siteSettings as Partial<Settings>).enabled;
+      delete (siteSettings as Partial<Settings>).nativePlayerSkin;
       const existing = (store.sites[host] ? { ...store.sites[host] } : {}) as SiteEntry;
       const existingProfiles: Partial<Record<AspectRatioBucket, Partial<Settings>>> = existing.profiles ? { ...existing.profiles } : {};
 

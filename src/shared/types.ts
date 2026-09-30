@@ -8,6 +8,7 @@ export const VALID_LANGUAGES = [
   'auto', 'en', 'de', 'ja', 'es', 'fr', 'pt_BR', 'zh_CN', 'ko', 'it', 'ru', 'pl', 'nl', 'zh_TW', 'tr', 'uk', 'vi', 'id', 'cs',
 ] as const;
 export type Language = (typeof VALID_LANGUAGES)[number];
+export type NativePlayerSkin = 'classic' | 'liquid-glass';
 export interface Settings {
   enabled: boolean;
   controlMode: 'native' | 'floating' | 'both';
@@ -35,6 +36,7 @@ export interface Settings {
   displayProfile: DisplayProfile;
   customDisplayAspectRatio: number;
   nativeHtml5Workaround: boolean;
+  nativePlayerSkin: NativePlayerSkin;
   language: Language;
 }
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
   displayProfile: 'auto',
   customDisplayAspectRatio: 2.39,
   nativeHtml5Workaround: true,
+  nativePlayerSkin: 'classic',
   language: 'auto',
 };
 export interface PlayerBinding {

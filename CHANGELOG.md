@@ -2,6 +2,20 @@
 
 All notable changes to **just_zoom** are documented in this file.
 
+## [0.7.1] - 2026-10-01
+
+### Added
+- **Liquid Glass Inspired skin**: Added an alternative frosted-glass pill skin for the native HTML5 player workaround, selectable under Options → Experimental.
+
+### Changed
+- **Cleaner in-video popup**: Trimmed down the floating quick controls popup inside video players by removing the ambience description text and update rate selector, keeping the panel compact while retaining gesture shortcuts.
+- **Snappier controls hide timer**: Reduced the inactivity hide timeout on playing video from 2.5s down to 1s so the controls bar tucks away quicker when your cursor is idle.
+
+### Fixed
+- **Custom player detection on social sites**: Stopped the native HTML5 controls workaround from mistakenly taking over videos on sites like Facebook, Twitter / X, and Reddit that use `<video>` without native controls. These now correctly fall back to generic floating controls instead of injecting a duplicate player bar.
+- **Dynamic player updates**: Improved adapter state detection so dynamic player or DOM changes properly switch between native and generic controls without getting stuck.
+- **Global skin persistence**: Fixed settings normalization and storage synchronization so the chosen player skin stays global and isn't unintentionally reset by saved per-site preferences.
+
 ## [0.7.0] - 2026-09-30
 
 ### Added

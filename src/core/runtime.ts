@@ -110,7 +110,7 @@ export function startRuntime(): () => void {
           patch, reset, resetPan, action, activate,
           saveSite: () => { void save('site'); },
           saveGlobal: () => { void save('global'); },
-        });
+        }, settings);
         geometryObserver?.disconnect();
         geometryObserver = new ResizeObserver(() => update());
         geometryObserver.observe(binding.viewport);
@@ -437,7 +437,7 @@ export function startRuntime(): () => void {
       const fresh = bindPlayer(video, binding!);
       const viewportChanged = fresh.viewport !== binding!.viewport;
       const controlsChanged = fresh.controls !== binding!.controls || fresh.controlBefore !== binding!.controlBefore
-        || fresh.controlAnchor !== binding!.controlAnchor;
+        || fresh.controlAnchor !== binding!.controlAnchor || fresh.adapter !== binding!.adapter;
       if (!viewportChanged && !controlsChanged) {
         transform?.refresh();
         update();

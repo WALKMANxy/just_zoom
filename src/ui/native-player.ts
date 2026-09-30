@@ -437,6 +437,214 @@ const STYLE_SHADOW = `
   left: 10px;
   font-size: 11px;
 }
+
+/* =========================================================================
+   SKIN: Liquid Glass (Video.js v10 floating frosted glass capsule)
+   ========================================================================= */
+
+:host([data-skin="liquid-glass"]) .jz-surface {
+  bottom: 64px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-bar {
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  width: auto;
+  max-width: calc(100% - 28px);
+  margin: 0 auto;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  background: rgba(16, 18, 24, 0.48);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transform: translateY(8px) scale(0.98);
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:host([data-skin="liquid-glass"]) .jz-bar.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+:host([data-skin="liquid-glass"]) .jz-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  transition: background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+:host([data-skin="liquid-glass"]) .jz-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.12);
+}
+
+:host([data-skin="liquid-glass"]) .jz-btn:active {
+  background: rgba(255, 255, 255, 0.26);
+  transform: scale(0.92);
+}
+
+:host([data-skin="liquid-glass"]) .jz-timeline-rail {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: height 0.12s ease;
+}
+
+:host([data-skin="liquid-glass"]) .jz-timeline-wrap:hover .jz-timeline-rail,
+:host([data-skin="liquid-glass"]) .jz-timeline-wrap.is-dragging .jz-timeline-rail {
+  height: 6px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-timeline-buffered {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 9999px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-timeline-played {
+  background: #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+:host([data-skin="liquid-glass"]) .jz-timeline-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+}
+
+:host([data-skin="liquid-glass"]) .jz-timeline-tip {
+  bottom: 28px;
+  background: rgba(18, 18, 26, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+:host([data-skin="liquid-glass"]) .jz-volume-popup {
+  bottom: calc(100% + 12px);
+  background: rgba(18, 18, 26, 0.72);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+  box-shadow: 
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+:host([data-skin="liquid-glass"]) .jz-volume-track {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-volume-level {
+  background: #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+}
+
+:host([data-skin="liquid-glass"]) .jz-volume-thumb {
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+:host([data-skin="liquid-glass"]) .jz-menu {
+  bottom: calc(100% + 12px);
+  background: rgba(18, 18, 26, 0.75);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  padding: 6px;
+  box-shadow: 
+    0 14px 36px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+:host([data-skin="liquid-glass"]) .jz-menu-item {
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-menu-item:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:host([data-skin="liquid-glass"]) .jz-speed-list {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-speed-opt {
+  border-radius: 8px;
+}
+
+:host([data-skin="liquid-glass"]) .jz-speed-opt:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:host([data-skin="liquid-glass"].is-fullscreen) .jz-bar {
+  bottom: 24px;
+  left: 32px;
+  right: 32px;
+  max-width: 1100px;
+  height: 52px;
+  padding: 0 18px;
+}
+
+:host([data-skin="liquid-glass"].is-fullscreen) .jz-btn {
+  width: 36px;
+  height: 36px;
+}
+
+:host([data-skin="liquid-glass"].is-fullscreen) .jz-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+:host([data-skin="liquid-glass"].is-fullscreen) .jz-time {
+  font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  :host([data-skin="liquid-glass"]) .jz-bar {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-width: calc(100% - 16px);
+    height: 42px;
+    padding: 0 8px;
+    gap: 4px;
+  }
+  :host([data-skin="liquid-glass"]) .jz-btn {
+    width: 28px;
+    height: 28px;
+  }
+  :host([data-skin="liquid-glass"]) .jz-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+  :host([data-skin="liquid-glass"]) .jz-time {
+    font-size: 10.5px;
+  }
+}
 `;
 
 const ICONS = {
@@ -571,6 +779,7 @@ function triggerDownload(url: string) {
 export function createNativePlayer(
   initialBinding: PlayerBinding,
   handlers: ControlsHandlers,
+  initialSettings?: Settings,
 ): NativePlayerController {
   let binding = initialBinding;
   const { video } = binding;
@@ -590,6 +799,7 @@ export function createNativePlayer(
 
   const host = document.createElement('div');
   host.className = 'jz-controls-host jz-native-controls-host';
+  host.setAttribute('data-skin', initialSettings?.nativePlayerSkin || 'classic');
   const shadow = host.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
@@ -800,7 +1010,7 @@ export function createNativePlayer(
           wrapper.classList.add('jz-fullscreen-idle');
         }
       }
-    }, 2500);
+    }, 1000);
   };
 
   const togglePlay = () => {
@@ -1095,6 +1305,7 @@ export function createNativePlayer(
 
   const onFullscreenChange = () => {
     const isFs = document.fullscreenElement === wrapper;
+    host.classList.toggle('is-fullscreen', isFs);
     fsBtn.innerHTML = isFs ? ICONS.fsExit : ICONS.fsEnter;
     if (!isFs) {
       wrapper.classList.remove('jz-fullscreen-idle');
@@ -1121,6 +1332,10 @@ export function createNativePlayer(
 
   return {
     update(settings: Settings) {
+      const skin = settings.nativePlayerSkin || 'classic';
+      if (host.getAttribute('data-skin') !== skin) {
+        host.setAttribute('data-skin', skin);
+      }
       if (!settings.enabled) {
         bar.classList.remove('is-visible');
       }

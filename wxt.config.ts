@@ -9,7 +9,7 @@ export default defineConfig({
     default_locale: 'en',
     name: '__MSG_manifest_name__',
     description: '__MSG_manifest_description__',
-    version: '0.7.0',
+    version: '0.7.1',
     permissions: ['storage', 'downloads'],
     icons: { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128: 'icons/128.png' },
     options_ui: { page: 'options.html', open_in_tab: true },

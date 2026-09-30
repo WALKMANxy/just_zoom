@@ -451,33 +451,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     ambienceRow.append(button);
     return { button, value: choice.value };
   });
-  const ambienceHint = document.createElement('div');
-  ambienceHint.className = 'panel-tip';
-  ambienceHint.textContent = i18n.t('controls_ambience_hint');
 
-  const ambienceRateTitle = document.createElement('div');
-  ambienceRateTitle.className = 'panel-section-title';
-  ambienceRateTitle.textContent = i18n.t('controls_update_rate');
-  const ambienceRateRow = document.createElement('div');
-  ambienceRateRow.className = 'panel-presets';
-  ambienceRateRow.setAttribute('role', 'group');
-  ambienceRateRow.setAttribute('aria-label', i18n.t('controls_update_rate_aria'));
-  const ambiencePerformanceBtn = makeButton(i18n.t('common_performance'), 'ambience-rate-performance', 'panel-preset');
-  const ambienceHighBtn = makeButton(i18n.t('common_default'), 'ambience-rate-high', 'panel-preset');
-  const ambienceQualityBtn = makeButton(i18n.t('common_quality'), 'ambience-rate-quality', 'panel-preset');
-  ambiencePerformanceBtn.title = i18n.t('controls_rate_performance_title');
-  ambienceHighBtn.title = i18n.t('controls_rate_high_title');
-  ambienceQualityBtn.title = i18n.t('controls_rate_quality_title');
-  ambiencePerformanceBtn.setAttribute('aria-label', i18n.t('controls_rate_performance_aria'));
-  ambienceHighBtn.setAttribute('aria-label', i18n.t('controls_rate_high_aria'));
-  ambienceQualityBtn.setAttribute('aria-label', i18n.t('controls_rate_quality_aria'));
-  ambiencePerformanceBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'performance' }));
-  ambienceHighBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'high' }));
-  ambienceQualityBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'quality' }));
-  ambienceRateRow.append(ambienceHighBtn, ambiencePerformanceBtn, ambienceQualityBtn);
-  const ambienceRateHint = document.createElement('div');
-  ambienceRateHint.className = 'panel-tip';
-  ambienceRateHint.textContent = i18n.t('controls_rate_hint');
 
   const gestureTip = document.createElement('div');
   gestureTip.className = 'panel-tip';
@@ -495,10 +469,6 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     resetPanBtn,
     ambienceTitle,
     ambienceRow,
-    ambienceHint,
-    ambienceRateTitle,
-    ambienceRateRow,
-    ambienceRateHint,
     gestureTip,
     settingsButton,
   );
@@ -962,17 +932,9 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       );
       btn.setAttribute('aria-pressed', String(isSelected));
     }
-
-    const isAmbienceOn = Boolean(settings && settings.ambience !== 'off');
     for (const { button, value } of ambienceButtons) {
       button.setAttribute('aria-pressed', String(settings?.ambience === value));
     }
-    ambiencePerformanceBtn.setAttribute('aria-pressed', String(settings?.ambienceRate === 'performance'));
-    ambienceHighBtn.setAttribute('aria-pressed', String(settings?.ambienceRate === 'high'));
-    ambienceQualityBtn.setAttribute('aria-pressed', String(settings?.ambienceRate === 'quality'));
-    ambiencePerformanceBtn.disabled = !isAmbienceOn;
-    ambienceHighBtn.disabled = !isAmbienceOn;
-    ambienceQualityBtn.disabled = !isAmbienceOn;
 
     const isPanned = Boolean(settings && (Math.abs(settings.panX) > 0.001 || Math.abs(settings.panY) > 0.001));
     resetPanBtn.disabled = !isPanned;

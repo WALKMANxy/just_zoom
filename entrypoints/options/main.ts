@@ -73,6 +73,7 @@ const settingsSaveBtn = document.querySelector<HTMLButtonElement>('#settings-sav
 const settingsResetBtn = document.querySelector<HTMLButtonElement>('#settings-reset-btn')!;
 const videoFinderModeSelect = document.querySelector<HTMLSelectElement>('#setting-videoFinderMode')!;
 const nativeHtml5WorkaroundCheckbox = document.querySelector<HTMLInputElement>('#setting-nativeHtml5Workaround')!;
+const nativePlayerSkinSelect = document.querySelector<HTMLSelectElement>('#setting-nativePlayerSkin')!;
 const displayProfileSelect = document.querySelector<HTMLSelectElement>('#setting-displayProfile')!;
 const customRatioGroup = document.querySelector<HTMLElement>('#custom-ratio-group')!;
 const customRatioInput = document.querySelector<HTMLInputElement>('#setting-customDisplayAspectRatio')!;
@@ -217,6 +218,7 @@ function applySettingsToForm(settings: Settings) {
   setExclusiveButtons(ambienceRateButtons, settings.ambienceRate);
   videoFinderModeSelect.value = settings.videoFinderMode || 'treewalker';
   nativeHtml5WorkaroundCheckbox.checked = settings.nativeHtml5Workaround ?? true;
+  if (nativePlayerSkinSelect) nativePlayerSkinSelect.value = settings.nativePlayerSkin || 'classic';
 }
 
 function readSettingsFromForm(): Settings {
@@ -241,6 +243,7 @@ function readSettingsFromForm(): Settings {
     ambienceRate: selectedButtonValue(ambienceRateButtons, 'high') as Settings['ambienceRate'],
     videoFinderMode: (videoFinderModeSelect.value as 'treewalker' | 'bruteforce') || 'treewalker',
     nativeHtml5Workaround: nativeHtml5WorkaroundCheckbox.checked,
+    nativePlayerSkin: (nativePlayerSkinSelect?.value as Settings['nativePlayerSkin']) || 'classic',
   };
 }
 
