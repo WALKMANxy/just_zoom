@@ -46,6 +46,7 @@ tabButtons.forEach(btn => {
 const masterToggleBtn = document.querySelector<HTMLButtonElement>('#setting-master-toggle')!;
 const settingsGrid = document.querySelector<HTMLElement>('#settings-grid')!;
 const languageSelect = document.querySelector<HTMLSelectElement>('#setting-language')!;
+const languageStatus = document.querySelector<HTMLElement>('#language-status');
 const controlModeSelect = document.querySelector<HTMLSelectElement>('#setting-controlMode')!;
 const buttonActionSelect = document.querySelector<HTMLSelectElement>('#setting-buttonAction')!;
 const rememberSiteStateCheckbox = document.querySelector<HTMLInputElement>('#setting-rememberSiteState')!;
@@ -253,8 +254,14 @@ languageSelect.addEventListener('change', async () => {
   void renderSavedSites();
   try {
     await saveGlobalSettings(currentGlobal);
+    if (languageStatus) {
+      languageStatus.textContent = i18n.t('options_language_status_saved');
+    }
   } catch (err) {
     console.error('Failed to save language setting:', err);
+    if (languageStatus) {
+      languageStatus.textContent = i18n.t('options_status_save_failed');
+    }
   }
 });
 
@@ -290,6 +297,9 @@ settingsResetBtn.addEventListener('click', async () => {
   hydrateOptionsI18n();
   applySettingsToForm(DEFAULT_SETTINGS);
   currentGlobal = { ...DEFAULT_SETTINGS };
+  if (languageStatus) {
+    languageStatus.textContent = '';
+  }
   settingsResetBtn.disabled = true;
   try {
     await saveGlobalSettings(DEFAULT_SETTINGS);

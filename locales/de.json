@@ -273,5 +273,9 @@
   "options_language_auto": "Automatisch (Browser-Standard)",
   "options_language_en": "English (Englisch)",
   "options_language_de": "Deutsch",
-  "options_language_ja": "日本語 (Japanisch)"
+  "options_language_ja": "日本語 (Japanisch)",
+  "options_tab_language": "Sprache",
+  "options_language_heading": "Spracheinstellungen",
+  "options_language_desc": "Wählen Sie Ihre bevorzugte Sprache. Änderungen werden sofort für alle Player-Steuerelemente, Popups und Einstellungen angewendet.",
+  "options_language_status_saved": "Spracheinstellung gespeichert."
 }

@@ -273,5 +273,9 @@
   "options_language_auto": "Auto (Browser default)",
   "options_language_en": "English",
   "options_language_de": "Deutsch (German)",
-  "options_language_ja": "日本語 (Japanese)"
+  "options_language_ja": "日本語 (Japanese)",
+  "options_tab_language": "Language",
+  "options_language_heading": "Language Settings",
+  "options_language_desc": "Select your preferred language. Changes apply immediately across all player controls, popups, and settings.",
+  "options_language_status_saved": "Language preference saved."
 }

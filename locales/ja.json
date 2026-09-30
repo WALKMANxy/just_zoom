@@ -273,5 +273,9 @@
   "options_language_auto": "自動（ブラウザのデフォルト）",
   "options_language_en": "English（英語）",
   "options_language_de": "Deutsch（ドイツ語）",
-  "options_language_ja": "日本語"
+  "options_language_ja": "日本語",
+  "options_tab_language": "言語",
+  "options_language_heading": "言語設定",
+  "options_language_desc": "表示言語を選択します。変更はすべてのプレーヤーコントロール、ポップアップ、設定画面に直ちに適用されます。",
+  "options_language_status_saved": "言語設定を保存しました。"
 }

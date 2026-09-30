@@ -18,6 +18,7 @@
 
   <nav class="tabs-nav" role="tablist" aria-label="Settings sections">
     <button type="button" role="tab" class="tab-btn active" id="tab-btn-settings" aria-selected="true" aria-controls="tab-panel-settings" data-i18n="options_tab_settings">Settings</button>
+    <button type="button" role="tab" class="tab-btn" id="tab-btn-language" aria-selected="false" aria-controls="tab-panel-language" data-i18n="options_tab_language">Language</button>
     <button type="button" role="tab" class="tab-btn" id="tab-btn-sites" aria-selected="false" aria-controls="tab-panel-sites" data-i18n="options_tab_sites">Saved Sites</button>
     <button type="button" role="tab" class="tab-btn" id="tab-btn-shortcuts" aria-selected="false" aria-controls="tab-panel-shortcuts" data-i18n="options_tab_shortcuts">Keyboard Shortcuts</button>
     <button type="button" role="tab" class="tab-btn" id="tab-btn-lab" aria-selected="false" aria-controls="tab-panel-lab" data-i18n="options_tab_lab">Player Lab</button>
@@ -39,16 +40,6 @@
       <article class="settings-card">
         <h2 data-i18n="options_controls_appearance_heading">Controls &amp; Appearance</h2>
         <p class="hint" data-i18n="options_controls_appearance_hint">Choose how just_zoom controls appear on web video players.</p>
-
-        <label for="setting-language"><span data-i18n="options_language_label">Interface language</span>
-          <select id="setting-language">
-            <option value="auto" data-i18n="options_language_auto">Auto (Browser default)</option>
-            <option value="en" data-i18n="options_language_en">English</option>
-            <option value="de" data-i18n="options_language_de">Deutsch (German)</option>
-            <option value="ja" data-i18n="options_language_ja">日本語 (Japanese)</option>
-          </select>
-          <span class="hint" data-i18n="options_language_hint">Choose your preferred language for controls, popup, and settings.</span>
-        </label>
 
         <label for="setting-controlMode"><span data-i18n="options_control_display_mode">Control display mode</span>
           <select id="setting-controlMode">
@@ -194,6 +185,27 @@
         <button type="button" id="settings-reset-btn" data-i18n="options_restore_default_btn">Restore default settings</button>
       </div>
       <p id="settings-status" role="status" aria-live="polite" data-i18n="options_settings_footer_status">Settings apply automatically to new players.</p>
+    </div>
+  </section>
+
+  <!-- TAB: LANGUAGE -->
+  <section id="tab-panel-language" role="tabpanel" aria-labelledby="tab-btn-language" class="tab-panel" hidden>
+    <div class="settings-grid">
+      <article class="settings-card" style="grid-column: 1 / -1; max-width: 650px;">
+        <h2 data-i18n="options_language_heading">Language Settings</h2>
+        <p class="hint" data-i18n="options_language_desc">Select your preferred language. Changes apply immediately across all player controls, popups, and settings.</p>
+
+        <label for="setting-language" style="margin-top: 16px;"><span data-i18n="options_language_label">Interface language</span>
+          <select id="setting-language" style="font-size: 15px; padding: 8px 12px; margin-top: 8px;">
+            <option value="auto" data-i18n="options_language_auto">Auto (Browser default)</option>
+            <option value="en" data-i18n="options_language_en">English</option>
+            <option value="de" data-i18n="options_language_de">Deutsch (German)</option>
+            <option value="ja" data-i18n="options_language_ja">日本語 (Japanese)</option>
+          </select>
+        </label>
+        <p class="hint" data-i18n="options_language_hint" style="margin-top: 10px;">Choose your preferred language for controls, popup, and settings.</p>
+        <p id="language-status" role="status" aria-live="polite" style="margin-top: 16px; font-size: 13px; color: #a0a0ab;"></p>
+      </article>
     </div>
   </section>
 
