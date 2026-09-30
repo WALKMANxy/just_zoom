@@ -1,7 +1,7 @@
 import './style.css';
 import { startRuntime } from '../../src/core/runtime';
 import { setupShortcutSettings } from './shortcuts';
-import { eraseSettings, loadFullStore, saveGlobalSettings } from '../../src/shared/storage';
+import { eraseSettings, loadFullStore, normalizeSettings, saveGlobalSettings } from '../../src/shared/storage';
 import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Settings, type SiteEntry } from '../../src/shared/types';
 import { automaticZoomFactor } from '../../src/core/eligibility';
 import { isMac } from '../../src/shared/shortcuts';
@@ -60,7 +60,8 @@ const modeSelect = document.querySelector<HTMLSelectElement>('#setting-mode')!;
 const zoomStrategySelect = document.querySelector<HTMLSelectElement>('#setting-zoomStrategy')!;
 const zoomSlider = document.querySelector<HTMLInputElement>('#setting-zoom')!;
 const zoomVal = document.querySelector<HTMLElement>('#setting-zoom-val')!;
-const ambienceSelect = document.querySelector<HTMLSelectElement>('#setting-ambience')!;
+const ambienceButtons = document.querySelectorAll<HTMLButtonElement>('#setting-ambience button');
+const ambienceRateButtons = document.querySelectorAll<HTMLButtonElement>('#setting-ambienceRate button');
 const settingsStatus = document.querySelector<HTMLElement>('#settings-status')!;
 const settingsSaveBtn = document.querySelector<HTMLButtonElement>('#settings-save-btn')!;
 const settingsResetBtn = document.querySelector<HTMLButtonElement>('#settings-reset-btn')!;
@@ -76,6 +77,24 @@ const experimentalStatus = document.querySelector<HTMLElement>('#experimental-st
 let currentGlobal: Settings = { ...DEFAULT_SETTINGS };
 
 const zoomPresetChips = document.querySelectorAll<HTMLButtonElement>('.preset-chip');
+
+function setExclusiveButtons(buttons: NodeListOf<HTMLButtonElement>, value: string) {
+  buttons.forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.value === value));
+  });
+}
+
+function selectedButtonValue(buttons: NodeListOf<HTMLButtonElement>, fallback: string) {
+  return Array.from(buttons).find(button => button.getAttribute('aria-pressed') === 'true')?.dataset.value || fallback;
+}
+
+ambienceButtons.forEach(button => {
+  button.addEventListener('click', () => setExclusiveButtons(ambienceButtons, button.dataset.value || 'blur'));
+});
+
+ambienceRateButtons.forEach(button => {
+  button.addEventListener('click', () => setExclusiveButtons(ambienceRateButtons, button.dataset.value || 'high'));
+});
 
 function updateZoomDisplay() {
   const val = Number.parseFloat(zoomSlider.value);
@@ -116,7 +135,8 @@ function updateMasterToggleUI(enabled: boolean) {
   modeSelect.disabled = !enabled;
   zoomStrategySelect.disabled = !enabled;
   zoomSlider.disabled = !enabled;
-  ambienceSelect.disabled = !enabled;
+  ambienceButtons.forEach(button => { button.disabled = !enabled; });
+  ambienceRateButtons.forEach(button => { button.disabled = !enabled; });
   displayProfileSelect.disabled = !enabled;
   customRatioInput.disabled = !enabled;
   zoomPresetChips.forEach(chip => { chip.disabled = !enabled; });
@@ -178,7 +198,8 @@ function applySettingsToForm(settings: Settings) {
   zoomStrategySelect.value = settings.zoomStrategy;
   zoomSlider.value = String(settings.zoom);
   updateZoomDisplay();
-  ambienceSelect.value = settings.ambience;
+  setExclusiveButtons(ambienceButtons, settings.ambience);
+  setExclusiveButtons(ambienceRateButtons, settings.ambienceRate);
   videoFinderModeSelect.value = settings.videoFinderMode || 'treewalker';
   nativeHtml5WorkaroundCheckbox.checked = settings.nativeHtml5Workaround ?? true;
 }
@@ -200,7 +221,8 @@ function readSettingsFromForm(): Settings {
     mode: modeSelect.value as 'fit' | 'fill',
     zoomStrategy: zoomStrategySelect.value as 'manual' | 'automatic',
     zoom: Number.parseFloat(zoomSlider.value) || 1.34,
-    ambience: ambienceSelect.value as 'off' | 'soft' | 'full',
+    ambience: selectedButtonValue(ambienceButtons, 'blur') as Settings['ambience'],
+    ambienceRate: selectedButtonValue(ambienceRateButtons, 'high') as Settings['ambienceRate'],
     videoFinderMode: (videoFinderModeSelect.value as 'treewalker' | 'bruteforce') || 'treewalker',
     nativeHtml5Workaround: nativeHtml5WorkaroundCheckbox.checked,
   };
@@ -289,6 +311,7 @@ async function renderSavedSites() {
 
     function makeChipsForProfile(data: Partial<Settings>): HTMLElement[] {
       const chips: HTMLElement[] = [];
+      const normalized = normalizeSettings(data);
       if (data.zoomApplied === false) {
         const chip = document.createElement('span');
         chip.className = 'site-chip';
@@ -316,8 +339,15 @@ async function renderSavedSites() {
       if (data.ambience && data.ambience !== 'off') {
         const chip = document.createElement('span');
         chip.className = 'site-chip';
-        chip.textContent = `Ambience: ${data.ambience === 'soft' ? 'Soft' : 'Full'}`;
+        chip.textContent = `Ambience: ${normalized.ambience === 'colour' ? 'Colour' : 'Blur'}`;
         chips.push(chip);
+        if (data.ambienceRate) {
+          const rateChip = document.createElement('span');
+          rateChip.className = 'site-chip';
+          const rateLabel = normalized.ambienceRate === 'performance' ? 'Performance' : normalized.ambienceRate === 'quality' ? 'Quality' : 'Default';
+          rateChip.textContent = `Rate: ${rateLabel}`;
+          chips.push(rateChip);
+        }
       }
 
       if (data.autoCrop) {

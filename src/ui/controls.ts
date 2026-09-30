@@ -169,6 +169,7 @@ const STYLE = `
     right: calc(100% + 8px);
     top: 50%;
     width: min(200px, calc(100vw - 58px));
+    max-height: calc(100vh - 20px);
     padding: 10px;
     border: 1px solid rgba(255, 255, 255, .2);
     border-radius: 10px;
@@ -177,6 +178,7 @@ const STYLE = `
     color: #eee;
     font: 12px/1.35 system-ui, sans-serif;
     transform: translateY(-50%);
+    overflow-y: auto;
   }
   .panel[hidden] { display: none; }
   .panel-header {
@@ -430,27 +432,75 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     handlers.resetPan();
   });
 
-  // Ambience toggle with last used mode memory
-  let lastAmbienceMode: 'soft' | 'full' = 'soft';
-  const ambienceButton = makeButton('Ambience: Off', 'toggle-ambience', 'panel-toggle');
-  ambienceButton.addEventListener('click', () => {
-    const isOff = !settings || settings.ambience === 'off';
-    if (isOff) {
-      handlers.patch({ ambience: lastAmbienceMode || 'soft' });
-    } else {
-      if (settings?.ambience && settings.ambience !== 'off') {
-        lastAmbienceMode = settings.ambience as 'soft' | 'full';
-      }
-      handlers.patch({ ambience: 'off' });
-    }
+  const ambienceTitle = document.createElement('div');
+  ambienceTitle.className = 'panel-section-title';
+  ambienceTitle.textContent = 'Ambience';
+  const ambienceRow = document.createElement('div');
+  ambienceRow.className = 'panel-presets';
+  ambienceRow.setAttribute('role', 'group');
+  ambienceRow.setAttribute('aria-label', 'Ambience appearance');
+  const ambienceChoices: Array<{ label: string; value: Settings['ambience'] }> = [
+    { label: 'Off', value: 'off' },
+    { label: 'Blur', value: 'blur' },
+    { label: 'Colour', value: 'colour' },
+  ];
+  const ambienceButtons = ambienceChoices.map(choice => {
+    const button = makeButton(choice.label, `ambience-${choice.value}`, 'panel-preset');
+    button.addEventListener('click', () => handlers.patch({ ambience: choice.value }));
+    ambienceRow.append(button);
+    return { button, value: choice.value };
   });
+  const ambienceHint = document.createElement('div');
+  ambienceHint.className = 'panel-tip';
+  ambienceHint.textContent = 'Blur shows a softened video image; Colour follows broad scene colours.';
+
+  const ambienceRateTitle = document.createElement('div');
+  ambienceRateTitle.className = 'panel-section-title';
+  ambienceRateTitle.textContent = 'Update rate';
+  const ambienceRateRow = document.createElement('div');
+  ambienceRateRow.className = 'panel-presets';
+  ambienceRateRow.setAttribute('role', 'group');
+  ambienceRateRow.setAttribute('aria-label', 'Ambience update rate');
+  const ambiencePerformanceBtn = makeButton('Performance', 'ambience-rate-performance', 'panel-preset');
+  const ambienceHighBtn = makeButton('Default', 'ambience-rate-high', 'panel-preset');
+  const ambienceQualityBtn = makeButton('Quality', 'ambience-rate-quality', 'panel-preset');
+  ambiencePerformanceBtn.title = 'Update ambience every 150 ms.';
+  ambienceHighBtn.title = 'Update ambience every 75 ms.';
+  ambienceQualityBtn.title = 'Update ambience every 40 ms.';
+  ambiencePerformanceBtn.setAttribute('aria-label', 'Performance: update ambience every 150 milliseconds');
+  ambienceHighBtn.setAttribute('aria-label', 'Default: update ambience every 75 milliseconds');
+  ambienceQualityBtn.setAttribute('aria-label', 'Quality: update ambience every 40 milliseconds');
+  ambiencePerformanceBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'performance' }));
+  ambienceHighBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'high' }));
+  ambienceQualityBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'quality' }));
+  ambienceRateRow.append(ambienceHighBtn, ambiencePerformanceBtn, ambienceQualityBtn);
+  const ambienceRateHint = document.createElement('div');
+  ambienceRateHint.className = 'panel-tip';
+  ambienceRateHint.textContent = 'Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.';
 
   const gestureTip = document.createElement('div');
   gestureTip.className = 'panel-tip';
   gestureTip.textContent = `Hold ${formatModifier('alt')} + scroll to zoom, drag to pan`;
 
   const settingsButton = makeButton('Extension settings…', 'open-settings', 'panel-settings');
-  panel.append(panelHeader, activateButton, quickTitle, quickRow, factorTitle, factorModeRow, presetRow, resetPanBtn, ambienceButton, gestureTip, settingsButton);
+  panel.append(
+    panelHeader,
+    activateButton,
+    quickTitle,
+    quickRow,
+    factorTitle,
+    factorModeRow,
+    presetRow,
+    resetPanBtn,
+    ambienceTitle,
+    ambienceRow,
+    ambienceHint,
+    ambienceRateTitle,
+    ambienceRateRow,
+    ambienceRateHint,
+    gestureTip,
+    settingsButton,
+  );
   nativeShadow.append(nativeButton, disneyTooltip);
   floatingSurface.append(floatingButton, panel);
   floatingShadow.append(floatingSurface);
@@ -535,6 +585,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       floatingButton.setAttribute('aria-expanded', 'true');
       cancelHide();
       setFloatingVisible(true);
+      positionFloating();
       window.addEventListener('pointerdown', onOutsidePointerDown, true);
       activateButton.focus();
     } else {
@@ -631,6 +682,12 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     if (floatingHost.style.top !== `${top}px`) floatingHost.style.top = `${top}px`;
     const panelWidth = `${Math.max(0, Math.min(184, left - 16))}px`;
     if (panel.style.width !== panelWidth) panel.style.width = panelWidth;
+    if (!panel.hidden) {
+      const height = panel.getBoundingClientRect().height;
+      const panelTop = Math.max(10, Math.min(innerHeight - height - 10, top + 17 - height / 2));
+      panel.style.top = `${panelTop - top}px`;
+      panel.style.transform = 'none';
+    }
   };
 
   const floatingParent = (): HTMLElement => {
@@ -906,13 +963,15 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     }
 
     const isAmbienceOn = Boolean(settings && settings.ambience !== 'off');
-    if (isAmbienceOn && settings?.ambience) {
-      lastAmbienceMode = settings.ambience as 'soft' | 'full';
+    for (const { button, value } of ambienceButtons) {
+      button.setAttribute('aria-pressed', String(settings?.ambience === value));
     }
-    ambienceButton.textContent = isAmbienceOn
-      ? `Ambience: ${settings?.ambience === 'soft' ? 'Soft' : 'Full'}`
-      : 'Ambience: Off';
-    ambienceButton.setAttribute('aria-pressed', String(isAmbienceOn));
+    ambiencePerformanceBtn.setAttribute('aria-pressed', String(settings?.ambienceRate === 'performance'));
+    ambienceHighBtn.setAttribute('aria-pressed', String(settings?.ambienceRate === 'high'));
+    ambienceQualityBtn.setAttribute('aria-pressed', String(settings?.ambienceRate === 'quality'));
+    ambiencePerformanceBtn.disabled = !isAmbienceOn;
+    ambienceHighBtn.disabled = !isAmbienceOn;
+    ambienceQualityBtn.disabled = !isAmbienceOn;
 
     const isPanned = Boolean(settings && (Math.abs(settings.panX) > 0.001 || Math.abs(settings.panY) > 0.001));
     resetPanBtn.disabled = !isPanned;

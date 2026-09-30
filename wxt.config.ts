@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     name: 'just_zoom',
     description: 'Fit, fill, frame and softly illuminate web video. Entirely local.',
-    version: '0.6.0',
+    version: '0.6.5',
     permissions: ['storage', 'downloads'],
     icons: { 16: 'icons/16.png', 32: 'icons/32.png', 48: 'icons/48.png', 128: 'icons/128.png' },
     options_ui: { page: 'options.html', open_in_tab: true },

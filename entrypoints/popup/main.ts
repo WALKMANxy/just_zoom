@@ -49,12 +49,16 @@ function button(text: string, click: () => void, disabled = false) {
   return result;
 }
 
-function choices(label: string, values: Array<[string, string | number]>, current: string | number, change: (value: string | number) => void) {
+function choices(label: string, values: Array<[string, string | number, string?]>, current: string | number, change: (value: string | number) => void) {
   const group = node('fieldset');
   group.append(node('legend', label));
   const buttons = node('div', '', 'segments');
-  for (const [text, value] of values) {
+  for (const [text, value, title] of values) {
     const item = button(text, () => change(value));
+    if (title) {
+      item.title = title;
+      item.setAttribute('aria-label', `${text}: ${title}`);
+    }
     if (value === 'auto-zoom' && !AUTO_CROP_AVAILABLE) {
       item.disabled = true;
       item.title = 'Auto Zoom is temporarily paused.';
@@ -237,16 +241,25 @@ function render() {
   // Extras and settings
   const extras = node('section', '', 'extras');
   extras.append(node('h2', 'Player button'));
-  extras.append(choices('Player controls', [['Native button', 'native'], ['Floating popup', 'floating'], ['Both', 'both']], s.controlMode, value => patch({ controlMode: value as Settings['controlMode'] })));
-  extras.append(node('p', s.controlMode === 'native' ? 'Inserted before fullscreen where the player exposes compatible controls.' : 'Reveals within 200px of the video box’s right-center edge. Opens leftward.', 'hint'));
+  extras.append(choices('Player controls', [['Both', 'both'], ['Native button', 'native'], ['Floating popup', 'floating']], s.controlMode, value => patch({ controlMode: value as Settings['controlMode'] })));
+  extras.append(node('p', s.controlMode === 'both' ? 'In-player button where supported, plus a floating popup.' : s.controlMode === 'native' ? 'Inserted before fullscreen where the player exposes compatible controls.' : 'Reveals within 200px of the video box’s right-center edge. Opens leftward.', 'hint'));
   extras.append(check('Animate zoom transitions', 'animations'));
   if (snapshot.adapter === 'Netflix' || /(^|\.)netflix\.com$/.test(snapshot.hostname)) {
     extras.append(node('p', 'Zoom animations are always disabled on Netflix for stability.', 'hint'));
   }
   extras.append(node('h2', 'Ambience'));
-  const ambience = choices('Ambience', [['Off', 'off'], ['Soft', 'soft'], ['Full', 'full']], s.ambience, value => patch({ ambience: value as Settings['ambience'] }));
+  const ambience = choices('Ambience', [['Off', 'off'], ['Blur', 'blur'], ['Colour', 'colour']], s.ambience, value => patch({ ambience: value as Settings['ambience'] }));
   ambience.setAttribute('aria-describedby', 'local-pixels');
-  extras.append(ambience);
+  extras.append(ambience, node('p', 'Blur shows a softened video image; Colour follows broad scene colours.', 'hint'));
+  const ambienceRate = choices('Update rate', [
+    ['Default', 'high', 'Update ambience every 75 ms.'],
+    ['Performance', 'performance', 'Update ambience every 150 ms.'],
+    ['Quality', 'quality', 'Update ambience every 40 ms.'],
+  ], s.ambienceRate, value => patch({ ambienceRate: value as Settings['ambienceRate'] }));
+  if (s.ambience === 'off') {
+    ambienceRate.querySelectorAll('button').forEach(item => { item.disabled = true; });
+  }
+  extras.append(ambienceRate, node('p', 'Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.', 'hint'));
   const pixels = node('p', 'Video pixels are processed only on this device. They are not saved or uploaded.', 'hint');
   pixels.id = 'local-pixels';
   extras.append(pixels, check('Allow portrait video / player', 'allowPortrait'));

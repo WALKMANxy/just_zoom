@@ -296,6 +296,40 @@ input[type="range"] {
   border-color: #3b82f6;
 }
 
+.experiment-group {
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.experiment-group legend {
+  margin-bottom: 8px;
+  color: #c5c5ca;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.experiment-segments {
+  display: flex;
+  gap: 6px;
+}
+
+.experiment-segments button {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+.experiment-segments button[aria-pressed="true"] {
+  background: #1e3a8a;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+.experiment-hint {
+  margin-bottom: 0;
+}
+
 /* Settings Footer */
 .settings-footer {
   padding: 20px 24px;
@@ -726,5 +760,3 @@ footer {
 .email-link:hover {
   color: #93c5fd;
 }
-
-

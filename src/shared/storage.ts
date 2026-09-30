@@ -14,12 +14,15 @@ export const FRAMING_KEYS: (keyof Settings)[] = [
   'panY',
   'autoCrop',
   'ambience',
+  'ambienceRate',
 ];
 const clamp = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 
 export function normalizeSettings(value: Partial<Settings> | unknown, base: Settings = DEFAULT_SETTINGS): Settings {
-  const v = value && typeof value === 'object' ? value as Partial<Settings> : {};
+  const v = value && typeof value === 'object' ? value as Partial<Settings> & { ambienceRenderer?: unknown } : {};
+  const ambience = v.ambience as string | undefined;
+  const rate = v.ambienceRate as string | undefined;
   return {
     enabled: typeof v.enabled === 'boolean' ? v.enabled : base.enabled,
     controlMode: v.controlMode === 'native' || v.controlMode === 'floating' || v.controlMode === 'both' ? v.controlMode : base.controlMode,
@@ -35,7 +38,11 @@ export function normalizeSettings(value: Partial<Settings> | unknown, base: Sett
     zoom: clamp(v.zoom, base.zoom, 1 / 3, 3),
     panX: clamp(v.panX, base.panX, -1, 1), panY: clamp(v.panY, base.panY, -1, 1),
     autoCrop: AUTO_CROP_AVAILABLE && (typeof v.autoCrop === 'boolean' ? v.autoCrop : base.autoCrop),
-    ambience: ['off', 'soft', 'full'].includes(v.ambience as string) ? v.ambience! : base.ambience,
+    // Preserve explicit Off and convert saved experiment choices to the two retained paths.
+    ambience: ['off', 'blur', 'colour'].includes(ambience ?? '') ? ambience as Settings['ambience']
+      : ambience === 'soft' || ambience === 'full' ? v.ambienceRenderer === 'p3' ? 'colour' : 'blur' : base.ambience,
+    ambienceRate: ['performance', 'high', 'quality'].includes(rate ?? '') ? rate as Settings['ambienceRate']
+      : rate === 'low' ? 'performance' : base.ambienceRate,
     compatibility: typeof v.compatibility === 'boolean' ? v.compatibility : base.compatibility,
     rememberSiteState: typeof v.rememberSiteState === 'boolean' ? v.rememberSiteState : base.rememberSiteState,
     videoFinderMode: v.videoFinderMode === 'bruteforce' ? 'bruteforce' : (v.videoFinderMode === 'treewalker' ? 'treewalker' : base.videoFinderMode),

@@ -4,6 +4,8 @@ import { CropTracker, detectBorders } from './detector';
 import { FrameSource } from './frame-source';
 import { AUTO_CROP_AVAILABLE } from '../shared/features';
 
+const AMBIENCE_INTERVAL: Record<Settings['ambienceRate'], number> = { performance: 150, high: 75, quality: 40 };
+
 export class EffectsController {
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private crop: Crop = { ...EMPTY_CROP };
@@ -21,6 +23,7 @@ export class EffectsController {
   private staticDone = false;
   private lastDetection = 0;
   private sourceUrl = '';
+  private sampledTime = -1;
   private statusValue: FeatureStatus = { source: 'idle', message: '' };
   constructor(private readonly binding: PlayerBinding, private readonly onCrop: (crop: Crop) => void, private readonly onStatus: (status: FeatureStatus) => void) {
     this.sourceUrl = binding.video.currentSrc;
@@ -36,6 +39,7 @@ export class EffectsController {
     settings = { ...settings, autoCrop: AUTO_CROP_AVAILABLE && settings.autoCrop };
     const changed = JSON.stringify(this.settings) !== JSON.stringify(settings);
     const autoChanged = this.settings.autoCrop !== settings.autoCrop;
+    if (this.settings.ambience !== settings.ambience) this.source.reset();
     this.settings = { ...settings };
     if (autoChanged) this.tracker.clearCandidate();
     this.ambience.update(settings.enabled ? settings.ambience : 'off');
@@ -54,6 +58,7 @@ export class EffectsController {
   private wake = (): void => {
     if (this.disposed) return;
     this.staticDone = false; this.generation++; this.source.invalidate();
+    this.sampledTime = -1;
     this.ambience.update(this.settings.enabled ? this.settings.ambience : 'off');
     if (this.timer) clearTimeout(this.timer); this.timer = null;
     if (!this.busy) void this.tick();
@@ -72,12 +77,18 @@ export class EffectsController {
     this.busy = true;
     try {
       const video = this.binding.video;
-      if (this.sourceUrl !== video.currentSrc) { this.sourceUrl = video.currentSrc; this.source.reset(); this.tracker.reset(); this.crop = { ...EMPTY_CROP }; this.target = { ...EMPTY_CROP }; this.onCrop(this.crop); }
-      const sample = await this.source.sample(this.settings, this.crop);
+      if (this.sourceUrl !== video.currentSrc) { this.sourceUrl = video.currentSrc; this.sampledTime = -1; this.source.reset(); this.tracker.reset(); this.crop = { ...EMPTY_CROP }; this.target = { ...EMPTY_CROP }; this.onCrop(this.crop); }
+      // Buffering/stalled media can keep the timer alive without producing new frames.
+      if (this.sampledTime === video.currentTime) return;
+      const sample = await this.source.sample(this.settings, this.crop, {
+        readPixels: this.settings.autoCrop,
+        width: this.settings.ambience === 'colour' ? 32 : 192,
+      });
       if (this.disposed || generation !== this.generation) return;
       const now = performance.now();
       if (sample) {
-        if (this.settings.autoCrop && sample.detectorSafe && now - this.lastDetection >= 400) {
+        this.sampledTime = video.currentTime;
+        if (this.settings.autoCrop && sample.detectorSafe && sample.pixels && now - this.lastDetection >= 400) {
           this.lastDetection = now;
           const accepted = this.tracker.observe(detectBorders(sample.pixels), now); if (accepted) this.target = accepted;
         }
@@ -100,7 +111,7 @@ export class EffectsController {
     } finally {
       this.busy = false;
       if (!this.disposed && this.wanted() && !document.hidden && this.intersection && !(this.binding.video.paused && this.staticDone)) {
-        this.timer = setTimeout(() => { this.timer = null; void this.tick(); }, this.binding.video.paused ? 1500 : this.settings.ambience !== 'off' ? 150 : 450);
+        this.timer = setTimeout(() => { this.timer = null; void this.tick(); }, this.binding.video.paused ? 1500 : this.settings.ambience !== 'off' ? AMBIENCE_INTERVAL[this.settings.ambienceRate] : 450);
       }
     }
   }

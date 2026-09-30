@@ -161,7 +161,7 @@ export function startRuntime(): () => void {
     if (change.mode === 'fit' && (change.zoomApplied ?? settings.zoomApplied)) showHud('Fit', 'mode');
     else if (change.mode === 'fill' && (change.zoomApplied ?? settings.zoomApplied)) showHud('Fill', 'mode');
     if (change.enabled !== undefined) { void save('global'); }
-    const stateEdit = manualEdit || change.zoomApplied !== undefined || change.zoomStrategy !== undefined || change.zoomType !== undefined || change.mode !== undefined || change.ambience !== undefined || change.buttonFactor !== undefined || change.buttonUseLast !== undefined || change.buttonAction !== undefined || change.controlMode !== undefined || change.gesturesEnabled !== undefined || change.gestureModifier !== undefined || change.hudEnabled !== undefined || change.displayProfile !== undefined || change.customDisplayAspectRatio !== undefined;
+    const stateEdit = manualEdit || change.zoomApplied !== undefined || change.zoomStrategy !== undefined || change.zoomType !== undefined || change.mode !== undefined || change.ambience !== undefined || change.ambienceRate !== undefined || change.buttonFactor !== undefined || change.buttonUseLast !== undefined || change.buttonAction !== undefined || change.controlMode !== undefined || change.gesturesEnabled !== undefined || change.gestureModifier !== undefined || change.hudEnabled !== undefined || change.displayProfile !== undefined || change.customDisplayAspectRatio !== undefined;
     if (change.rememberSiteState !== undefined || (stateEdit && settings.rememberSiteState)) {
       localEditRevision++; localSettingsDirty = true;
       clearTimeout(siteSaveTimer);
@@ -209,9 +209,9 @@ export function startRuntime(): () => void {
       case 'toggle-auto-crop':
         patch({ autoCrop: !settings.autoCrop }); break;
       case 'toggle-ambience': {
-        const next = settings.ambience === 'off' ? 'soft' : 'off';
+        const next = settings.ambience === 'off' ? 'blur' : 'off';
         patch({ ambience: next });
-        showHud(next === 'off' ? 'Ambience Off' : `Ambience ${next === 'soft' ? 'Soft' : 'Full'}`, 'ambience');
+        showHud(next === 'off' ? 'Ambience Off' : `Ambience ${next === 'blur' ? 'Blur' : 'Colour'}`, 'ambience');
         break;
       }
       case 'toggle-controls': controls?.toggle(); break;

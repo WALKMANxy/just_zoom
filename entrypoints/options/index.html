@@ -129,13 +129,25 @@
         <h2>Ambience Lighting</h2>
         <p class="hint">Softly illuminate the area behind the video with dynamic local backdrops.</p>
 
-        <label for="setting-ambience">Default ambience mode
-          <select id="setting-ambience">
-            <option value="off">Off (disabled)</option>
-            <option value="soft">Soft blur (subtle ambient glow)</option>
-            <option value="full">Full expanded backdrop</option>
-          </select>
-        </label>
+        <fieldset class="experiment-group">
+          <legend>Default ambience mode</legend>
+          <div class="experiment-segments" id="setting-ambience">
+            <button type="button" data-value="off">Off</button>
+            <button type="button" data-value="blur">Blur</button>
+            <button type="button" data-value="colour">Colour</button>
+          </div>
+        </fieldset>
+        <p class="hint experiment-hint">Blur shows a softened video image; Colour follows broad scene colours.</p>
+
+        <fieldset class="experiment-group">
+          <legend>Update rate</legend>
+          <div class="experiment-segments" id="setting-ambienceRate">
+            <button type="button" data-value="high" title="Update ambience every 75 ms." aria-label="Default: update ambience every 75 milliseconds">Default</button>
+            <button type="button" data-value="performance" title="Update ambience every 150 ms." aria-label="Performance: update ambience every 150 milliseconds">Performance</button>
+            <button type="button" data-value="quality" title="Update ambience every 40 ms." aria-label="Quality: update ambience every 40 milliseconds">Quality</button>
+          </div>
+        </fieldset>
+        <p class="hint experiment-hint">Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.</p>
       </article>
 
       <!-- Card: Multi-Monitor & Display Profiles -->

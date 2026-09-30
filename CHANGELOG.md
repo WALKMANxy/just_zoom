@@ -2,6 +2,18 @@
 
 All notable changes to **just_zoom** are documented in this file.
 
+## [0.6.5] - 2026-09-30
+
+### Changed
+- **Ambience modes**: Replaced Soft/Full and experimental renderer buttons with Off, Blur, and Colour. Blur uses a padded low-resolution video image blurred before enlargement; Colour uses a smoothed spatial color field. Both retain Full's brightness and backdrop extent.
+- **Ambience processing**: Separated visual sampling from pixel analysis, using small periodic readability checks rather than reading every backdrop frame. Ticks are skipped while media time is unchanged, with existing pause, visibility, fullscreen, and teardown handling preserved.
+- **Update rate**: Added Default (75 ms), Performance (150 ms), and Quality (40 ms), ordered with Default first. These delays run after each sampling/rendering tick finishes.
+- **New-install defaults**: Ambience now starts with Blur and the Default update rate. Player controls default to Both, listed before Native button and Floating popup. Existing saved preferences are migrated, including explicit Off choices.
+- **Settings interface**: Added concise explanations for ambience appearance and update rate across the player panel, toolbar popup, and options page. Saved-site labels reflect migrated preferences.
+
+### Fixed
+- **Player panel layout**: Added scrolling and viewport positioning limits so the expanded quick controls remain accessible in smaller windows.
+
 ## [0.6.0] - 2026-09-28
 
 ### Added

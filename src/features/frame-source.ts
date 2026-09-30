@@ -1,7 +1,8 @@
 import { EMPTY_CROP, type Crop, type FeatureStatus, type PlayerBinding, type Settings } from '../shared/types';
 import { isContextInvalidationError, isContextValid, markContextInvalid } from '../shared/storage';
 
-export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData; source: 'direct' | 'compatibility'; detectorSafe: boolean }
+export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData | null; source: 'direct' | 'compatibility'; detectorSafe: boolean }
+export interface SampleRequest { readPixels?: boolean; width?: number }
 const hasCrop = (crop: Crop) => Object.values(crop).some(value => value > .001);
 const sameRect = (a: DOMRect, b: DOMRect) => ['x', 'y', 'width', 'height'].every(key => Math.abs(a[key as keyof DOMRect] as number - (b[key as keyof DOMRect] as number)) < 1);
 
@@ -14,16 +15,28 @@ export class FrameSource {
   private generation = 0;
   private failureCount = 0;
   private retryAt = 0;
+  private visual: HTMLCanvasElement | null = null;
+  private visualCtx: CanvasRenderingContext2D | null = null;
+  private probe: HTMLCanvasElement | null = null;
+  private probeCtx: CanvasRenderingContext2D | null = null;
+  private lastProbe = -Infinity;
   constructor(private readonly binding: PlayerBinding, private readonly status: (value: FeatureStatus) => void) {}
   invalidate(): void { this.generation++; }
   reset(): void {
     this.invalidate(); this.unreadable = false; this.lowInformation = 0; this.failureCount = 0; this.retryAt = 0;
     this.canvas.width = 192;
+    this.lastProbe = -Infinity;
   }
-  dispose(): void { this.invalidate(); this.canvas.width = 0; this.canvas.height = 0; }
-  async sample(settings: Settings, crop: Crop = EMPTY_CROP): Promise<Sample | null> {
+  dispose(): void {
+    this.invalidate(); this.canvas.width = 0; this.canvas.height = 0;
+    if (this.visual) this.visual.width = this.visual.height = 0;
+    if (this.probe) this.probe.width = this.probe.height = 0;
+    this.visual = this.probe = null; this.visualCtx = this.probeCtx = null;
+  }
+  async sample(settings: Settings, crop: Crop = EMPTY_CROP, request: SampleRequest = {}): Promise<Sample | null> {
     const video = this.binding.video;
     if (!this.ctx || document.hidden || !video.isConnected || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
+    if (request.readPixels === false) return this.sampleVisual(settings, request.width ?? 192);
     const size = { w: 192, h: Math.max(64, Math.min(192, Math.round(192 * video.videoHeight / video.videoWidth))) };
     if (this.canvas.width !== size.w || this.canvas.height !== size.h) { this.canvas.width = size.w; this.canvas.height = size.h; }
     if (!this.unreadable) {
@@ -100,6 +113,48 @@ export class FrameSource {
     */
     this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
     return null;
+  }
+  private sampleVisual(settings: Settings, width: number): Sample | null {
+    if (this.unreadable) {
+      this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+      return null;
+    }
+    if (!this.visual) {
+      this.visual = document.createElement('canvas');
+      // Visual frames should not inherit the detector canvas's frequent-read hint.
+      this.visualCtx = this.visual.getContext('2d');
+      this.probe = document.createElement('canvas'); this.probe.width = 16; this.probe.height = 9;
+      this.probeCtx = this.probe.getContext('2d', { willReadFrequently: true });
+    }
+    if (!this.visualCtx || !this.probeCtx || !this.probe) return null;
+    const video = this.binding.video, height = Math.max(Math.round(width / 3), Math.min(width, Math.round(width * video.videoHeight / video.videoWidth)));
+    if (this.visual.width !== width || this.visual.height !== height) {
+      this.visual.width = width; this.visual.height = height;
+    }
+    try {
+      this.visualCtx.drawImage(video, 0, 0, width, height);
+      const now = performance.now();
+      // Preserve a readability/black-frame check without reading every visual frame.
+      if (now - this.lastProbe >= 1000) {
+        this.probeCtx.drawImage(this.visual, 0, 0, 16, 9);
+        const pixels = this.probeCtx.getImageData(0, 0, 16, 9);
+        let bright = 0;
+        for (let i = 0; i < pixels.data.length; i += 4) if (Math.max(pixels.data[i]!, pixels.data[i + 1]!, pixels.data[i + 2]!) > 24) bright++;
+        this.lowInformation = bright > 16 * 9 * .03 ? 0 : this.lowInformation + 1;
+        this.lastProbe = now;
+      }
+      if (this.lowInformation >= 6 && settings.compatibility) {
+        this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+        return null;
+      }
+      this.status({ source: 'direct', message: this.lowInformation >= 6 ? 'Dark or unreadable pixels; crop held.' : 'Local video sampling' });
+      return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: false };
+    } catch {
+      this.unreadable = true;
+      this.visual.width = width; this.probe.width = 16;
+      this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+      return null;
+    }
   }
   private pictureRect(rect: DOMRect): DOMRect | null {
     const video = this.binding.video, cs = getComputedStyle(video);

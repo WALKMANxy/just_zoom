@@ -20,7 +20,8 @@ export interface Settings {
   panX: number;
   panY: number;
   autoCrop: boolean;
-  ambience: 'off' | 'soft' | 'full';
+  ambience: 'off' | 'blur' | 'colour';
+  ambienceRate: 'performance' | 'high' | 'quality';
   compatibility: boolean;
   rememberSiteState: boolean;
   videoFinderMode: VideoFinderMode;
@@ -32,10 +33,10 @@ export interface Settings {
   nativeHtml5Workaround: boolean;
 }
 export const DEFAULT_SETTINGS: Settings = {
-  enabled: true, animations: true, controlMode: 'native', buttonAction: 'zoom-in', buttonUseLast: true, buttonFactor: 1.34,
+  enabled: true, animations: true, controlMode: 'both', buttonAction: 'zoom-in', buttonUseLast: true, buttonFactor: 1.34,
   zoomApplied: false, zoomType: 'factor', zoomStrategy: 'manual', allowPortrait: false,
   mode: 'fit', zoom: 1.34, panX: 0, panY: 0,
-  autoCrop: false, ambience: 'off', compatibility: false,
+  autoCrop: false, ambience: 'blur', ambienceRate: 'high', compatibility: false,
   rememberSiteState: true,
   videoFinderMode: 'treewalker',
   gesturesEnabled: true,
