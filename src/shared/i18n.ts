@@ -1,21 +1,36 @@
 import enMessages from '../../locales/en.json';
 import deMessages from '../../locales/de.json';
 import jaMessages from '../../locales/ja.json';
+import esMessages from '../../locales/es.json';
+import frMessages from '../../locales/fr.json';
+import ptBrMessages from '../../locales/pt_BR.json';
+import zhCnMessages from '../../locales/zh_CN.json';
+import koMessages from '../../locales/ko.json';
 import type { GeneratedI18nStructure } from '../../.wxt/i18n/structure';
 
-export type Language = 'auto' | 'en' | 'de' | 'ja';
+export type Language = 'auto' | 'en' | 'de' | 'ja' | 'es' | 'fr' | 'pt_BR' | 'zh_CN' | 'ko';
 
 export const SUPPORTED_LANGUAGES: { value: Language; label: string }[] = [
   { value: 'auto', label: 'Auto (Browser default)' },
   { value: 'en', label: 'English' },
   { value: 'de', label: 'Deutsch' },
   { value: 'ja', label: '日本語' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'pt_BR', label: 'Português (Brasil)' },
+  { value: 'zh_CN', label: '简体中文' },
+  { value: 'ko', label: '한국어' },
 ];
 
-const DICTIONARIES: Record<'en' | 'de' | 'ja', Record<string, string>> = {
+const DICTIONARIES: Record<Exclude<Language, 'auto'>, Record<string, string>> = {
   en: enMessages,
   de: deMessages,
   ja: jaMessages,
+  es: esMessages,
+  fr: frMessages,
+  pt_BR: ptBrMessages,
+  zh_CN: zhCnMessages,
+  ko: koMessages,
 };
 
 let currentLanguage: Language = 'auto';
