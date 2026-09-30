@@ -1,3 +1,4 @@
+import { i18n } from '#i18n';
 import { DEFAULT_SHORTCUTS, SHORTCUT_ACTIONS, SHORTCUT_LABELS, formatShortcut, isMac, loadShortcuts, normalizeShortcuts, saveShortcuts, shortcutFromEvent, subscribeShortcuts, validateShortcuts, type ShortcutMap } from '../../src/shared/shortcuts';
 import type { ZoomAction } from '../../src/shared/types';
 
@@ -14,9 +15,9 @@ export function setupShortcutSettings(): () => void {
   const paint = () => {
     for (const action of SHORTCUT_ACTIONS) {
       const button = buttons.get(action)!;
-      button.textContent = recording === action ? 'Press shortcut…' : formatShortcut(map[action]);
+      button.textContent = recording === action ? i18n.t('shortcut_press_shortcut') : formatShortcut(map[action]);
       button.setAttribute('aria-pressed', String(recording === action));
-      button.setAttribute('aria-label', `Rebind ${SHORTCUT_LABELS[action].toLowerCase()}; ${formatShortcut(map[action])}`);
+      button.setAttribute('aria-label', i18n.t('shortcut_aria_rebind', [SHORTCUT_LABELS[action].toLowerCase(), formatShortcut(map[action])]));
     }
     cancel.hidden = recording === null;
   };
@@ -31,7 +32,7 @@ export function setupShortcutSettings(): () => void {
     pendingWrites++; setSaving(true);
     saving = saving.then(async () => {
       try { await saveShortcuts(snapshot); if (active) announce(text); }
-      catch { if (active) announce('Could not save shortcuts. Try again.'); }
+      catch { if (active) announce(i18n.t('shortcut_save_failed')); }
       finally { pendingWrites--; if (active && pendingWrites === 0) setSaving(false); }
     });
   };
@@ -39,19 +40,24 @@ export function setupShortcutSettings(): () => void {
     const row = document.createElement('div'); row.className = 'shortcut-row';
     const label = document.createElement('span'); label.textContent = SHORTCUT_LABELS[action];
     const record = document.createElement('button'); record.type = 'button'; record.disabled = true;
-    const onRecord = () => { recording = action; paint(); announce(`Press a key with ${isMac() ? 'Option, Control or Command' : 'Alt, Ctrl or Meta'} for ${SHORTCUT_LABELS[action].toLowerCase()}. Escape cancels.`); };
+    const onRecord = () => {
+      recording = action;
+      paint();
+      const mods = isMac() ? 'Option, Control or Command' : 'Alt, Ctrl or Meta';
+      announce(i18n.t('shortcut_press_prompt', [mods, SHORTCUT_LABELS[action].toLowerCase()]));
+    };
     record.addEventListener('click', onRecord);
     buttons.set(action, record);
-    const unbind = document.createElement('button'); unbind.type = 'button'; unbind.className = 'shortcut-unbind'; unbind.textContent = 'Unbind'; unbind.disabled = true;
-    unbind.setAttribute('aria-label', `Unbind ${SHORTCUT_LABELS[action].toLowerCase()}`);
-    const onUnbind = () => commit({ ...map, [action]: null }, `${SHORTCUT_LABELS[action]} unbound.`);
+    const unbind = document.createElement('button'); unbind.type = 'button'; unbind.className = 'shortcut-unbind'; unbind.textContent = i18n.t('shortcut_unbind_btn'); unbind.disabled = true;
+    unbind.setAttribute('aria-label', i18n.t('shortcut_aria_unbind', [SHORTCUT_LABELS[action].toLowerCase()]));
+    const onUnbind = () => commit({ ...map, [action]: null }, i18n.t('shortcut_announced_unbound', [SHORTCUT_LABELS[action]]));
     unbind.addEventListener('click', onUnbind);
     rowCleanup.push(() => { record.removeEventListener('click', onRecord); unbind.removeEventListener('click', onUnbind); });
     row.append(label, record, unbind); list.append(row);
   }
   paint(); reset.disabled = true;
-  const onCancel = () => { stopRecording(); announce('Recording cancelled.'); };
-  const onReset = () => commit(normalizeShortcuts(DEFAULT_SHORTCUTS), 'Default shortcuts restored.');
+  const onCancel = () => { stopRecording(); announce(i18n.t('shortcut_recording_cancelled')); };
+  const onReset = () => commit(normalizeShortcuts(DEFAULT_SHORTCUTS), i18n.t('shortcut_restored_defaults'));
   cancel.addEventListener('click', onCancel); reset.addEventListener('click', onReset);
   const listener = (event: KeyboardEvent) => {
     if (!recording) return;
@@ -59,14 +65,14 @@ export function setupShortcutSettings(): () => void {
     if (event.isComposing || event.repeat || ['AltLeft', 'AltRight', 'ControlLeft', 'ControlRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'].includes(event.code)) return;
     event.preventDefault(); event.stopImmediatePropagation();
     const binding = shortcutFromEvent(event);
-    if (!binding) { announce('Choose a supported key with Alt, Ctrl or Meta. Escape cancels.'); return; }
+    if (!binding) { announce(i18n.t('shortcut_invalid_prompt')); return; }
     const action = recording;
-    commit({ ...map, [action]: binding }, `${SHORTCUT_LABELS[action]} saved as ${formatShortcut(binding)}.`);
+    commit({ ...map, [action]: binding }, i18n.t('shortcut_saved_as', [SHORTCUT_LABELS[action], formatShortcut(binding)]));
   };
   document.addEventListener('keydown', listener, true);
   const unsubscribe = subscribeShortcuts(next => { revision++; if (pendingWrites === 0) { map = next; if (active) paint(); } });
   const initialRevision = revision;
-  void loadShortcuts().then(next => { if (active && revision === initialRevision) { map = next; paint(); } }).catch(() => announce('Using defaults; stored shortcuts could not be read.')).finally(() => {
+  void loadShortcuts().then(next => { if (active && revision === initialRevision) { map = next; paint(); } }).catch(() => announce(i18n.t('shortcut_load_failed'))).finally(() => {
     if (!active) return;
     setSaving(pendingWrites > 0);
   });

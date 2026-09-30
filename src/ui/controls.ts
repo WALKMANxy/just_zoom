@@ -9,6 +9,7 @@ import { isContextValid } from '../shared/storage';
 import { portraitBlocked } from '../core/eligibility';
 import { createDisneyPointerExclusion } from '../core/adapters';
 import { formatModifier } from '../shared/shortcuts';
+import { i18n } from '#i18n';
 
 const EVENT_TYPES = [
   'pointerdown',
@@ -318,8 +319,8 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   floatingShadow.append(style.cloneNode(true));
 
   const nativeButton = makeButton('', 'activate', 'native-button');
-  nativeButton.setAttribute('aria-label', 'Toggle Zoom');
-  nativeButton.title = 'Toggle Zoom';
+  nativeButton.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
+  nativeButton.title = i18n.t('controls_toggle_zoom');
   nativeButton.innerHTML = ICON_OPPOSING;
 
   const disneyTooltip = document.createElement('div');
@@ -328,20 +329,20 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   disneyTooltip.setAttribute('aria-hidden', 'true');
   const disneyTooltipLabel = document.createElement('span');
   disneyTooltipLabel.className = 'jz-disney-tooltip-label';
-  disneyTooltipLabel.textContent = 'Zoom';
+  disneyTooltipLabel.textContent = i18n.t('controls_zoom');
   const disneyTooltipArrow = document.createElement('span');
   disneyTooltipArrow.className = 'jz-disney-tooltip-arrow';
   disneyTooltip.append(disneyTooltipLabel, disneyTooltipArrow);
 
   const floatingButton = makeButton('', 'toggle-controls', 'floating-button');
-  floatingButton.setAttribute('aria-label', 'Open just_zoom controls');
+  floatingButton.setAttribute('aria-label', i18n.t('controls_open_controls'));
   floatingButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6M4 4v6M20 4h-6M20 4v6M4 20h6M4 20v-6M20 20h-6M20 20v-6"/></svg>';
 
   const panel = document.createElement('section');
   panel.className = 'panel';
   panel.hidden = true;
   panel.setAttribute('role', 'dialog');
-  panel.setAttribute('aria-label', 'just_zoom quick controls');
+  panel.setAttribute('aria-label', i18n.t('controls_quick_controls_aria'));
 
   const panelHeader = document.createElement('div');
   panelHeader.className = 'panel-header';
@@ -349,20 +350,20 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   panelTitle.textContent = 'just_zoom';
   const panelFactor = document.createElement('span');
   panelFactor.className = 'panel-factor';
-  panelFactor.textContent = 'Off';
+  panelFactor.textContent = i18n.t('common_off');
   panelHeader.append(panelTitle, panelFactor);
 
   const activateButton = makeButton('', 'activate', 'panel-action');
-  activateButton.setAttribute('aria-label', 'Toggle Zoom');
-  activateButton.innerHTML = `${ICON_OPPOSING} <span>Toggle Zoom</span>`;
+  activateButton.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
+  activateButton.innerHTML = `${ICON_OPPOSING} <span>${i18n.t('controls_toggle_zoom')}</span>`;
 
   // Quick zoom section: Fit and Fill
   const quickTitle = document.createElement('div');
   quickTitle.className = 'panel-section-title';
-  quickTitle.textContent = 'Quick zoom';
+  quickTitle.textContent = i18n.t('controls_quick_zoom');
   const quickRow = document.createElement('div');
   quickRow.className = 'panel-presets';
-  const fitBtn = makeButton('Fit', 'quick-fit', 'panel-preset');
+  const fitBtn = makeButton(i18n.t('common_fit'), 'quick-fit', 'panel-preset');
   fitBtn.addEventListener('click', () => {
     if (settings?.zoomApplied && settings?.zoomType === 'quick' && settings?.mode === 'fit') {
       handlers.patch({ zoomApplied: false });
@@ -370,7 +371,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       handlers.patch({ mode: 'fit', zoomType: 'quick', zoomApplied: true });
     }
   });
-  const fillBtn = makeButton('Fill', 'quick-fill', 'panel-preset');
+  const fillBtn = makeButton(i18n.t('common_fill'), 'quick-fill', 'panel-preset');
   fillBtn.addEventListener('click', () => {
     if (settings?.zoomApplied && settings?.zoomType === 'quick' && settings?.mode === 'fill') {
       handlers.patch({ zoomApplied: false });
@@ -383,22 +384,22 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   // Zoom factor section: OFF, SCREEN RATIO, MANUAL
   const factorTitle = document.createElement('div');
   factorTitle.className = 'panel-section-title';
-  factorTitle.textContent = 'Zoom factor';
+  factorTitle.textContent = i18n.t('controls_zoom_factor');
 
   const factorModeRow = document.createElement('div');
   factorModeRow.className = 'panel-presets';
 
-  const factorOffBtn = makeButton('Off', 'factor-off', 'panel-preset');
+  const factorOffBtn = makeButton(i18n.t('common_off'), 'factor-off', 'panel-preset');
   factorOffBtn.addEventListener('click', () => {
     handlers.patch({ zoomApplied: false });
   });
 
-  const factorRatioBtn = makeButton('Screen ratio', 'factor-ratio', 'panel-preset');
+  const factorRatioBtn = makeButton(i18n.t('common_screen_ratio'), 'factor-ratio', 'panel-preset');
   factorRatioBtn.addEventListener('click', () => {
     handlers.patch({ zoomStrategy: 'automatic', zoomType: 'factor', zoomApplied: true });
   });
 
-  const factorManualBtn = makeButton('Manual', 'factor-manual', 'panel-preset');
+  const factorManualBtn = makeButton(i18n.t('common_manual'), 'factor-manual', 'panel-preset');
   factorManualBtn.addEventListener('click', () => {
     const nextZoom = (settings?.zoom && settings.zoom > 1.0) ? settings.zoom : 1.34;
     handlers.patch({ zoomStrategy: 'manual', zoomType: 'factor', zoomApplied: true, zoom: nextZoom });
@@ -427,22 +428,22 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   });
 
   // Reset pan button
-  const resetPanBtn = makeButton('Reset pan', 'reset-pan', 'panel-toggle');
+  const resetPanBtn = makeButton(i18n.t('common_reset_pan'), 'reset-pan', 'panel-toggle');
   resetPanBtn.addEventListener('click', () => {
     handlers.resetPan();
   });
 
   const ambienceTitle = document.createElement('div');
   ambienceTitle.className = 'panel-section-title';
-  ambienceTitle.textContent = 'Ambience';
+  ambienceTitle.textContent = i18n.t('common_ambience');
   const ambienceRow = document.createElement('div');
   ambienceRow.className = 'panel-presets';
   ambienceRow.setAttribute('role', 'group');
-  ambienceRow.setAttribute('aria-label', 'Ambience appearance');
+  ambienceRow.setAttribute('aria-label', i18n.t('controls_ambience_appearance_aria'));
   const ambienceChoices: Array<{ label: string; value: Settings['ambience'] }> = [
-    { label: 'Off', value: 'off' },
-    { label: 'Blur', value: 'blur' },
-    { label: 'Colour', value: 'colour' },
+    { label: i18n.t('common_off'), value: 'off' },
+    { label: i18n.t('common_blur'), value: 'blur' },
+    { label: i18n.t('common_colour'), value: 'colour' },
   ];
   const ambienceButtons = ambienceChoices.map(choice => {
     const button = makeButton(choice.label, `ambience-${choice.value}`, 'panel-preset');
@@ -452,37 +453,37 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   });
   const ambienceHint = document.createElement('div');
   ambienceHint.className = 'panel-tip';
-  ambienceHint.textContent = 'Blur shows a softened video image; Colour follows broad scene colours.';
+  ambienceHint.textContent = i18n.t('controls_ambience_hint');
 
   const ambienceRateTitle = document.createElement('div');
   ambienceRateTitle.className = 'panel-section-title';
-  ambienceRateTitle.textContent = 'Update rate';
+  ambienceRateTitle.textContent = i18n.t('controls_update_rate');
   const ambienceRateRow = document.createElement('div');
   ambienceRateRow.className = 'panel-presets';
   ambienceRateRow.setAttribute('role', 'group');
-  ambienceRateRow.setAttribute('aria-label', 'Ambience update rate');
-  const ambiencePerformanceBtn = makeButton('Performance', 'ambience-rate-performance', 'panel-preset');
-  const ambienceHighBtn = makeButton('Default', 'ambience-rate-high', 'panel-preset');
-  const ambienceQualityBtn = makeButton('Quality', 'ambience-rate-quality', 'panel-preset');
-  ambiencePerformanceBtn.title = 'Update ambience every 150 ms.';
-  ambienceHighBtn.title = 'Update ambience every 75 ms.';
-  ambienceQualityBtn.title = 'Update ambience every 40 ms.';
-  ambiencePerformanceBtn.setAttribute('aria-label', 'Performance: update ambience every 150 milliseconds');
-  ambienceHighBtn.setAttribute('aria-label', 'Default: update ambience every 75 milliseconds');
-  ambienceQualityBtn.setAttribute('aria-label', 'Quality: update ambience every 40 milliseconds');
+  ambienceRateRow.setAttribute('aria-label', i18n.t('controls_update_rate_aria'));
+  const ambiencePerformanceBtn = makeButton(i18n.t('common_performance'), 'ambience-rate-performance', 'panel-preset');
+  const ambienceHighBtn = makeButton(i18n.t('common_default'), 'ambience-rate-high', 'panel-preset');
+  const ambienceQualityBtn = makeButton(i18n.t('common_quality'), 'ambience-rate-quality', 'panel-preset');
+  ambiencePerformanceBtn.title = i18n.t('controls_rate_performance_title');
+  ambienceHighBtn.title = i18n.t('controls_rate_high_title');
+  ambienceQualityBtn.title = i18n.t('controls_rate_quality_title');
+  ambiencePerformanceBtn.setAttribute('aria-label', i18n.t('controls_rate_performance_aria'));
+  ambienceHighBtn.setAttribute('aria-label', i18n.t('controls_rate_high_aria'));
+  ambienceQualityBtn.setAttribute('aria-label', i18n.t('controls_rate_quality_aria'));
   ambiencePerformanceBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'performance' }));
   ambienceHighBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'high' }));
   ambienceQualityBtn.addEventListener('click', () => handlers.patch({ ambienceRate: 'quality' }));
   ambienceRateRow.append(ambienceHighBtn, ambiencePerformanceBtn, ambienceQualityBtn);
   const ambienceRateHint = document.createElement('div');
   ambienceRateHint.className = 'panel-tip';
-  ambienceRateHint.textContent = 'Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.';
+  ambienceRateHint.textContent = i18n.t('controls_rate_hint');
 
   const gestureTip = document.createElement('div');
   gestureTip.className = 'panel-tip';
-  gestureTip.textContent = `Hold ${formatModifier('alt')} + scroll to zoom, drag to pan`;
+  gestureTip.textContent = i18n.t('controls_gesture_tip', [formatModifier('alt')]);
 
-  const settingsButton = makeButton('Extension settings…', 'open-settings', 'panel-settings');
+  const settingsButton = makeButton(i18n.t('controls_settings_button'), 'open-settings', 'panel-settings');
   panel.append(
     panelHeader,
     activateButton,
@@ -910,10 +911,10 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     if (nativeButton.dataset.active !== String(active)) {
       nativeButton.dataset.active = String(active);
       nativeButton.innerHTML = icon;
-      activateButton.innerHTML = `${icon} <span>Toggle Zoom</span>`;
+      activateButton.innerHTML = `${icon} <span>${i18n.t('controls_toggle_zoom')}</span>`;
     }
     const isDisney = binding.adapter === 'Disney+';
-    const defaultTitle = isDisney ? (active ? 'Reset Zoom' : 'Zoom') : 'Toggle Zoom';
+    const defaultTitle = isDisney ? (active ? i18n.t('controls_reset_zoom') : i18n.t('controls_zoom')) : i18n.t('controls_toggle_zoom');
     nativeButton.setAttribute('aria-label', defaultTitle);
     if (isDisney) {
       nativeButton.removeAttribute('title');
@@ -922,16 +923,16 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       nativeButton.title = defaultTitle;
     }
 
-    activateButton.setAttribute('aria-label', 'Toggle Zoom');
+    activateButton.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
     activateButton.disabled = false;
     activateButton.title = status?.source === 'unavailable' ? status.message : '';
 
     if (!settings || !active) {
-      panelFactor.textContent = 'Off';
+      panelFactor.textContent = i18n.t('common_off');
     } else if (settings.zoomType === 'quick') {
-      panelFactor.textContent = settings.mode === 'fill' ? 'Fill' : 'Fit';
+      panelFactor.textContent = settings.mode === 'fill' ? i18n.t('common_fill') : i18n.t('common_fit');
     } else if (settings.zoomStrategy === 'automatic') {
-      panelFactor.textContent = 'Screen';
+      panelFactor.textContent = i18n.t('common_screen_ratio');
     } else {
       panelFactor.textContent = `${Math.round(settings.zoom * 100)}%`;
     }
@@ -977,7 +978,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     resetPanBtn.disabled = !isPanned;
 
     const mod = settings?.gestureModifier ?? 'alt';
-    gestureTip.textContent = `Hold ${formatModifier(mod)} + scroll to zoom, drag to pan`;
+    gestureTip.textContent = i18n.t('controls_gesture_tip', [formatModifier(mod)]);
   };
 
   let layoutFrame = 0;
@@ -1051,7 +1052,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
         if (activateButton.title !== title) activateButton.title = title;
         const isDisney = binding.adapter === 'Disney+';
         const active = Boolean(settings?.zoomApplied);
-        const defaultTitle = isDisney ? (active ? 'Reset Zoom' : 'Zoom') : 'Toggle Zoom';
+        const defaultTitle = isDisney ? (active ? i18n.t('controls_reset_zoom') : i18n.t('controls_zoom')) : i18n.t('controls_toggle_zoom');
         if (isDisney) {
           nativeButton.removeAttribute('title');
           disneyTooltipLabel.textContent = defaultTitle;

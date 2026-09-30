@@ -5,6 +5,10 @@ import { eraseSettings, loadFullStore, normalizeSettings, saveGlobalSettings } f
 import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Settings, type SiteEntry } from '../../src/shared/types';
 import { automaticZoomFactor } from '../../src/core/eligibility';
 import { isMac } from '../../src/shared/shortcuts';
+import { i18n } from '#i18n';
+import { hydrateOptionsI18n } from './i18n';
+
+hydrateOptionsI18n();
 
 // ----------------------------------------------------------------------------
 // 1. Tab Navigation
@@ -122,7 +126,7 @@ function updateMasterToggleUI(enabled: boolean) {
   masterToggleBtn.classList.toggle('inactive', !enabled);
   masterToggleBtn.setAttribute('aria-pressed', String(enabled));
   const label = masterToggleBtn.querySelector('.toggle-label');
-  if (label) label.textContent = enabled ? 'just_zoom: Enabled' : 'just_zoom: Disabled';
+  if (label) label.textContent = enabled ? i18n.t('popup_enabled_label') : i18n.t('popup_disabled_label');
   settingsGrid.classList.toggle('disabled-grid', !enabled);
   controlModeSelect.disabled = !enabled;
   buttonActionSelect.disabled = !enabled;
@@ -149,19 +153,25 @@ function updateDisplayProfileUI() {
   if (typeof screen !== 'undefined') {
     const sw = screen.width, sh = screen.height;
     const ratio = (sw / sh).toFixed(2);
-    let name = 'Widescreen';
-    if (Math.abs(sw / sh - 16 / 9) < 0.05) name = '16:9 widescreen';
-    else if (Math.abs(sw / sh - 16 / 10) < 0.05) name = '16:10 widescreen';
-    else if (Math.abs(sw / sh - 21 / 9) < 0.1) name = '21:9 ultrawide';
-    else if (Math.abs(sw / sh - 32 / 9) < 0.15) name = '32:9 super ultrawide';
-    else if (Math.abs(sw / sh - 4 / 3) < 0.05) name = '4:3 standard';
+    let name = i18n.t('options_display_name_generic_widescreen');
+    if (Math.abs(sw / sh - 16 / 9) < 0.05) name = i18n.t('options_display_name_widescreen');
+    else if (Math.abs(sw / sh - 16 / 10) < 0.05) name = i18n.t('options_display_name_widescreen_16_10');
+    else if (Math.abs(sw / sh - 21 / 9) < 0.1) name = i18n.t('options_display_name_ultrawide_21_9');
+    else if (Math.abs(sw / sh - 32 / 9) < 0.15) name = i18n.t('options_display_name_super_ultrawide_32_9');
+    else if (Math.abs(sw / sh - 4 / 3) < 0.05) name = i18n.t('options_display_name_standard_4_3');
 
     const selectedProfile = displayProfileSelect.value as DisplayProfile;
     const customRatio = Number.parseFloat(customRatioInput.value) || 2.39;
     const effectiveFactor = automaticZoomFactor(selectedProfile, customRatio, sw, sh);
 
     if (detectedScreenText) {
-      detectedScreenText.textContent = `Current display: ${sw} × ${sh} (${name}, ${ratio}:1) • Auto zoom factor: ${effectiveFactor.toFixed(2)}×`;
+      detectedScreenText.textContent = i18n.t('options_detected_display_info', [
+        String(sw),
+        String(sh),
+        name,
+        ratio,
+        effectiveFactor.toFixed(2),
+      ]);
     }
   }
 }
@@ -175,9 +185,11 @@ masterToggleBtn.addEventListener('click', async () => {
   updateMasterToggleUI(currentGlobal.enabled);
   try {
     await saveGlobalSettings(currentGlobal);
-    settingsStatus.textContent = currentGlobal.enabled ? 'Extension enabled globally.' : 'Extension disabled globally.';
+    settingsStatus.textContent = currentGlobal.enabled
+      ? i18n.t('options_status_enabled_globally')
+      : i18n.t('options_status_disabled_globally');
   } catch {
-    settingsStatus.textContent = 'Could not update extension status.';
+    settingsStatus.textContent = i18n.t('options_status_update_failed');
   }
 });
 
@@ -245,9 +257,9 @@ settingsSaveBtn.addEventListener('click', async () => {
   settingsSaveBtn.disabled = true;
   try {
     await saveGlobalSettings(next);
-    settingsStatus.textContent = `Global settings saved at ${new Date().toLocaleTimeString()}.`;
+    settingsStatus.textContent = i18n.t('options_status_saved_at', [new Date().toLocaleTimeString()]);
   } catch {
-    settingsStatus.textContent = 'Could not save settings. Extension may need to be reloaded.';
+    settingsStatus.textContent = i18n.t('options_status_save_failed');
   } finally {
     settingsSaveBtn.disabled = false;
   }
@@ -259,9 +271,9 @@ settingsResetBtn.addEventListener('click', async () => {
   settingsResetBtn.disabled = true;
   try {
     await saveGlobalSettings(DEFAULT_SETTINGS);
-    settingsStatus.textContent = 'Restored default settings.';
+    settingsStatus.textContent = i18n.t('options_status_restored_defaults');
   } catch {
-    settingsStatus.textContent = 'Could not restore settings.';
+    settingsStatus.textContent = i18n.t('options_status_restore_failed');
   } finally {
     settingsResetBtn.disabled = false;
   }
@@ -273,9 +285,9 @@ experimentalSaveBtn.addEventListener('click', async () => {
   experimentalSaveBtn.disabled = true;
   try {
     await saveGlobalSettings(next);
-    experimentalStatus.textContent = `Experimental settings saved at ${new Date().toLocaleTimeString()}.`;
+    experimentalStatus.textContent = i18n.t('options_status_experimental_saved_at', [new Date().toLocaleTimeString()]);
   } catch {
-    experimentalStatus.textContent = 'Could not save experimental settings.';
+    experimentalStatus.textContent = i18n.t('options_status_experimental_save_failed');
   } finally {
     experimentalSaveBtn.disabled = false;
   }
@@ -300,8 +312,8 @@ async function renderSavedSites() {
       sitesClearAllBtn.disabled = true;
       sitesList.innerHTML = `
         <div class="sites-empty">
-          <p style="font-weight: 600; font-size: 15px; color: #ededee; margin-bottom: 6px;">No custom site settings saved yet</p>
-          <p>When you open the popup on any video player and click "Save site", its custom settings will appear here.</p>
+          <p style="font-weight: 600; font-size: 15px; color: #ededee; margin-bottom: 6px;">${i18n.t('options_sites_empty_title')}</p>
+          <p>${i18n.t('options_sites_empty_desc')}</p>
         </div>
       `;
       return;
@@ -315,7 +327,7 @@ async function renderSavedSites() {
       if (data.zoomApplied === false) {
         const chip = document.createElement('span');
         chip.className = 'site-chip';
-        chip.textContent = 'Zoom: Off';
+        chip.textContent = `${i18n.t('common_zoom')}: ${i18n.t('common_off')}`;
         chips.push(chip);
       } else {
         if (data.zoomType === 'quick') {
@@ -326,12 +338,12 @@ async function renderSavedSites() {
         } else if (data.zoomStrategy === 'automatic') {
           const chip = document.createElement('span');
           chip.className = 'site-chip';
-          chip.textContent = 'Strategy: Screen Ratio';
+          chip.textContent = i18n.t('options_sites_strategy_screen');
           chips.push(chip);
         } else if (data.zoom !== undefined) {
           const chip = document.createElement('span');
           chip.className = 'site-chip';
-          chip.textContent = `Zoom: ${(data.zoom * 100).toFixed(0)}%`;
+          chip.textContent = `${i18n.t('common_zoom')}: ${(data.zoom * 100).toFixed(0)}%`;
           chips.push(chip);
         }
       }
@@ -339,12 +351,12 @@ async function renderSavedSites() {
       if (data.ambience && data.ambience !== 'off') {
         const chip = document.createElement('span');
         chip.className = 'site-chip';
-        chip.textContent = `Ambience: ${normalized.ambience === 'colour' ? 'Colour' : 'Blur'}`;
+        chip.textContent = `${i18n.t('common_ambience')}: ${normalized.ambience === 'colour' ? i18n.t('common_colour') : i18n.t('common_blur')}`;
         chips.push(chip);
         if (data.ambienceRate) {
           const rateChip = document.createElement('span');
           rateChip.className = 'site-chip';
-          const rateLabel = normalized.ambienceRate === 'performance' ? 'Performance' : normalized.ambienceRate === 'quality' ? 'Quality' : 'Default';
+          const rateLabel = normalized.ambienceRate === 'performance' ? i18n.t('common_performance') : normalized.ambienceRate === 'quality' ? i18n.t('common_quality') : i18n.t('common_default');
           rateChip.textContent = `Rate: ${rateLabel}`;
           chips.push(rateChip);
         }
@@ -353,7 +365,7 @@ async function renderSavedSites() {
       if (data.autoCrop) {
         const chip = document.createElement('span');
         chip.className = 'site-chip';
-        chip.textContent = 'Auto Crop: On';
+        chip.textContent = `Auto Crop: ${i18n.t('common_on')}`;
         chips.push(chip);
       }
 
@@ -400,16 +412,16 @@ async function renderSavedSites() {
           const rowDelBtn = document.createElement('button');
           rowDelBtn.type = 'button';
           rowDelBtn.className = 'site-profile-del-btn';
-          rowDelBtn.textContent = 'Delete';
-          rowDelBtn.setAttribute('aria-label', `Delete ${bucket} settings for ${host}`);
+          rowDelBtn.textContent = i18n.t('options_sites_btn_delete');
+          rowDelBtn.setAttribute('aria-label', i18n.t('options_sites_aria_delete_profile', [bucket, host]));
           rowDelBtn.addEventListener('click', async () => {
             rowDelBtn.disabled = true;
             try {
               await eraseSettings('site', host, bucket);
-              sitesStatus.textContent = `Deleted ${bucket} settings for ${host}.`;
+              sitesStatus.textContent = i18n.t('options_sites_status_deleted_profile', [bucket, host]);
               void renderSavedSites();
             } catch {
-              sitesStatus.textContent = `Could not delete settings for ${host}.`;
+              sitesStatus.textContent = i18n.t('options_sites_status_delete_profile_failed', [host]);
               rowDelBtn.disabled = false;
             }
           });
@@ -428,16 +440,16 @@ async function renderSavedSites() {
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'site-delete-btn';
-      delBtn.textContent = profileEntries.length > 1 ? 'Delete all' : 'Delete';
-      delBtn.setAttribute('aria-label', `Delete all custom settings for ${host}`);
+      delBtn.textContent = profileEntries.length > 1 ? i18n.t('options_sites_btn_delete_all') : i18n.t('options_sites_btn_delete');
+      delBtn.setAttribute('aria-label', i18n.t('options_sites_aria_delete_all', [host]));
       delBtn.addEventListener('click', async () => {
         delBtn.disabled = true;
         try {
           await eraseSettings('site', host);
-          sitesStatus.textContent = `Deleted custom settings for ${host}.`;
+          sitesStatus.textContent = i18n.t('options_sites_status_deleted_site', [host]);
           void renderSavedSites();
         } catch {
-          sitesStatus.textContent = `Could not delete settings for ${host}.`;
+          sitesStatus.textContent = i18n.t('options_sites_status_delete_profile_failed', [host]);
           delBtn.disabled = false;
         }
       });
@@ -447,7 +459,7 @@ async function renderSavedSites() {
     }
   } catch (error) {
     console.error('Failed to render saved sites:', error);
-    sitesList.innerHTML = '<p class="hint">Could not read stored sites.</p>';
+    sitesList.innerHTML = `<p class="hint">${i18n.t('options_sites_read_failed')}</p>`;
   }
 }
 
@@ -455,10 +467,10 @@ sitesClearAllBtn.addEventListener('click', async () => {
   sitesClearAllBtn.disabled = true;
   try {
     await eraseSettings('sites');
-    sitesStatus.textContent = 'Cleared all saved site settings.';
+    sitesStatus.textContent = i18n.t('options_sites_status_cleared_all');
     void renderSavedSites();
   } catch {
-    sitesStatus.textContent = 'Could not clear saved sites.';
+    sitesStatus.textContent = i18n.t('options_sites_status_clear_failed');
     sitesClearAllBtn.disabled = false;
   }
 });

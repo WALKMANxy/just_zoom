@@ -18,8 +18,9 @@
   },
   "devDependencies": {
     "@types/chrome": "0.3.0",
+    "@wxt-dev/i18n": "^0.2.7",
+    "tsx": "4.23.13",
     "typescript": "7.0.2",
-    "wxt": "0.21.4",
-    "tsx": "4.23.13"
+    "wxt": "0.21.4"
   }
 }

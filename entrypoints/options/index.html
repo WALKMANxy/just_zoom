@@ -12,105 +12,105 @@
     <div class="header-top">
       <span class="brand">just_zoom</span>
     </div>
-    <h1>Your screen. Your framing.</h1>
-    <p class="subtitle">Customize global defaults, manage per-site saved framing, configure keyboard shortcuts, and test controls locally.</p>
+    <h1 data-i18n="options_tagline">Your screen. Your framing.</h1>
+    <p class="subtitle" data-i18n="options_subtitle">Customize global defaults, manage per-site saved framing, configure keyboard shortcuts, and test controls locally.</p>
   </header>
 
   <nav class="tabs-nav" role="tablist" aria-label="Settings sections">
-    <button type="button" role="tab" class="tab-btn active" id="tab-btn-settings" aria-selected="true" aria-controls="tab-panel-settings">Settings</button>
-    <button type="button" role="tab" class="tab-btn" id="tab-btn-sites" aria-selected="false" aria-controls="tab-panel-sites">Saved Sites</button>
-    <button type="button" role="tab" class="tab-btn" id="tab-btn-shortcuts" aria-selected="false" aria-controls="tab-panel-shortcuts">Keyboard Shortcuts</button>
-    <button type="button" role="tab" class="tab-btn" id="tab-btn-lab" aria-selected="false" aria-controls="tab-panel-lab">Player Lab</button>
-    <button type="button" role="tab" class="tab-btn" id="tab-btn-experimental" aria-selected="false" aria-controls="tab-panel-experimental">Experimental</button>
-    <button type="button" role="tab" class="tab-btn" id="tab-btn-info" aria-selected="false" aria-controls="tab-panel-info">Info</button>
+    <button type="button" role="tab" class="tab-btn active" id="tab-btn-settings" aria-selected="true" aria-controls="tab-panel-settings" data-i18n="options_tab_settings">Settings</button>
+    <button type="button" role="tab" class="tab-btn" id="tab-btn-sites" aria-selected="false" aria-controls="tab-panel-sites" data-i18n="options_tab_sites">Saved Sites</button>
+    <button type="button" role="tab" class="tab-btn" id="tab-btn-shortcuts" aria-selected="false" aria-controls="tab-panel-shortcuts" data-i18n="options_tab_shortcuts">Keyboard Shortcuts</button>
+    <button type="button" role="tab" class="tab-btn" id="tab-btn-lab" aria-selected="false" aria-controls="tab-panel-lab" data-i18n="options_tab_lab">Player Lab</button>
+    <button type="button" role="tab" class="tab-btn" id="tab-btn-experimental" aria-selected="false" aria-controls="tab-panel-experimental" data-i18n="options_tab_experimental">Experimental</button>
+    <button type="button" role="tab" class="tab-btn" id="tab-btn-info" aria-selected="false" aria-controls="tab-panel-info" data-i18n="options_tab_info">Info</button>
   </nav>
 
   <!-- TAB 1: GENERAL SETTINGS -->
   <section id="tab-panel-settings" role="tabpanel" aria-labelledby="tab-btn-settings" class="tab-panel">
     <div class="master-toggle-wrap">
       <button type="button" id="setting-master-toggle" class="master-toggle active" aria-pressed="true">
-        <span class="toggle-label">just_zoom: Enabled</span>
+        <span class="toggle-label" data-i18n="popup_enabled_label">just_zoom: Enabled</span>
       </button>
-      <span class="hint">Toggle just_zoom on or off globally across all websites.</span>
+      <span class="hint" data-i18n="options_master_toggle_hint">Toggle just_zoom on or off globally across all websites.</span>
     </div>
 
     <div class="settings-grid" id="settings-grid">
       <!-- Card: Controls & Appearance -->
       <article class="settings-card">
-        <h2>Controls &amp; Appearance</h2>
-        <p class="hint">Choose how just_zoom controls appear on web video players.</p>
+        <h2 data-i18n="options_controls_appearance_heading">Controls &amp; Appearance</h2>
+        <p class="hint" data-i18n="options_controls_appearance_hint">Choose how just_zoom controls appear on web video players.</p>
 
-        <label for="setting-controlMode">Control display mode
+        <label for="setting-controlMode"><span data-i18n="options_control_display_mode">Control display mode</span>
           <select id="setting-controlMode">
-            <option value="both">Both (In-player &amp; floating button)</option>
-            <option value="native">In-player button (where available)</option>
-            <option value="floating">Floating popup button</option>
+            <option value="both" data-i18n="options_control_mode_both_opt">Both (In-player &amp; floating button)</option>
+            <option value="native" data-i18n="options_control_mode_native_opt">In-player button (where available)</option>
+            <option value="floating" data-i18n="options_control_mode_floating_opt">Floating popup button</option>
           </select>
         </label>
 
-        <label for="setting-buttonAction">Primary button action
+        <label for="setting-buttonAction"><span data-i18n="options_primary_button_action">Primary button action</span>
           <select id="setting-buttonAction">
-            <option value="zoom-in">Apply / toggle zoom</option>
-            <option value="zoom-out">Zoom out</option>
+            <option value="zoom-in" data-i18n="options_btn_action_apply_zoom">Apply / toggle zoom</option>
+            <option value="zoom-out" data-i18n="options_btn_action_zoom_out">Zoom out</option>
           </select>
         </label>
 
         <div class="toggles-list">
           <label class="check">
             <input type="checkbox" id="setting-rememberSiteState">
-            <span>Remember zoom state per website</span>
+            <span data-i18n="options_remember_site_state">Remember zoom state per website</span>
           </label>
           <label class="check">
             <input type="checkbox" id="setting-animations">
-            <span>Enable smooth transition animations</span>
+            <span data-i18n="options_enable_smooth_animations">Enable smooth transition animations</span>
           </label>
           <label class="check">
             <input type="checkbox" id="setting-allowPortrait">
-            <span>Allow zoom in portrait (vertical) players</span>
+            <span data-i18n="options_allow_portrait_players">Allow zoom in portrait (vertical) players</span>
           </label>
           <label class="check">
             <input type="checkbox" id="setting-gesturesEnabled">
-            <span>Enable mouse gestures (Wheel Zoom &amp; Drag-to-Pan)</span>
+            <span data-i18n="options_enable_mouse_gestures">Enable mouse gestures (Wheel Zoom &amp; Drag-to-Pan)</span>
           </label>
-          <label for="setting-gestureModifier" style="margin-top: 8px;">Gesture modifier key
+          <label for="setting-gestureModifier" style="margin-top: 8px;"><span data-i18n="options_gesture_modifier_key">Gesture modifier key</span>
             <select id="setting-gestureModifier">
-              <option value="alt">Alt (default)</option>
-              <option value="ctrl">Ctrl</option>
-              <option value="shift">Shift</option>
-              <option value="meta">Meta / Command</option>
+              <option value="alt" data-i18n="options_gesture_modifier_alt">Alt (default)</option>
+              <option value="ctrl" data-i18n="options_gesture_modifier_ctrl">Ctrl</option>
+              <option value="shift" data-i18n="options_gesture_modifier_shift">Shift</option>
+              <option value="meta" data-i18n="options_gesture_modifier_meta">Meta / Command</option>
             </select>
-            <span class="hint">Hold this modifier while scrolling the wheel to zoom, or click &amp; drag over the video to pan framing.</span>
+            <span class="hint" data-i18n="options_gesture_modifier_hint">Hold this modifier while scrolling the wheel to zoom, or click &amp; drag over the video to pan framing.</span>
           </label>
           <label class="check">
             <input type="checkbox" id="setting-hudEnabled">
-            <span>Show on-screen display (HUD) feedback for gestures and shortcuts</span>
+            <span data-i18n="options_enable_hud">Show on-screen display (HUD) feedback for gestures and shortcuts</span>
           </label>
         </div>
       </article>
 
       <!-- Card: Default Framing -->
       <article class="settings-card">
-        <h2>Default Video Framing</h2>
-        <p class="hint">Global default zoom framing when activating zoom on a player.</p>
+        <h2 data-i18n="options_default_framing_heading">Default Video Framing</h2>
+        <p class="hint" data-i18n="options_default_framing_hint">Global default zoom framing when activating zoom on a player.</p>
 
-        <label for="setting-mode">Default zoom mode
+        <label for="setting-mode"><span data-i18n="options_default_zoom_mode">Default zoom mode</span>
           <select id="setting-mode">
-            <option value="fit">Fit (preserve entire picture)</option>
-            <option value="fill">Fill (fill player screen)</option>
+            <option value="fit" data-i18n="options_zoom_mode_fit_desc">Fit (preserve entire picture)</option>
+            <option value="fill" data-i18n="options_zoom_mode_fill_desc">Fill (fill player screen)</option>
           </select>
         </label>
 
-        <label for="setting-zoomStrategy">Zoom strategy
+        <label for="setting-zoomStrategy"><span data-i18n="options_zoom_strategy">Zoom strategy</span>
           <select id="setting-zoomStrategy">
-            <option value="manual">Manual zoom factor</option>
-            <option value="automatic">Automatic screen framing</option>
+            <option value="manual" data-i18n="options_zoom_strategy_manual">Manual zoom factor</option>
+            <option value="automatic" data-i18n="options_zoom_strategy_auto">Automatic screen framing</option>
           </select>
-          <span class="hint">Automatic screen framing calculates the exact scale needed to fill your display (e.g. 1.33× on a 21:9 ultrawide) based on screen resolution.</span>
+          <span class="hint" data-i18n="options_zoom_strategy_auto_hint">Automatic screen framing calculates the exact scale needed to fill your display (e.g. 1.33× on a 21:9 ultrawide) based on screen resolution.</span>
         </label>
 
         <div class="range-group">
           <div class="range-header">
-            <label for="setting-zoom" style="margin: 0;">Default manual factor</label>
+            <label for="setting-zoom" style="margin: 0;" data-i18n="options_default_manual_factor">Default manual factor</label>
             <span id="setting-zoom-val" class="range-val">1.34×</span>
           </div>
           <input type="range" id="setting-zoom" min="1.0" max="3.0" step="0.05" value="1.34">
@@ -126,64 +126,64 @@
 
       <!-- Card: Ambience Backdrop -->
       <article class="settings-card">
-        <h2>Ambience Lighting</h2>
-        <p class="hint">Softly illuminate the area behind the video with dynamic local backdrops.</p>
+        <h2 data-i18n="options_ambience_lighting_heading">Ambience Lighting</h2>
+        <p class="hint" data-i18n="options_ambience_lighting_hint">Softly illuminate the area behind the video with dynamic local backdrops.</p>
 
         <fieldset class="experiment-group">
-          <legend>Default ambience mode</legend>
+          <legend data-i18n="options_default_ambience_mode">Default ambience mode</legend>
           <div class="experiment-segments" id="setting-ambience">
-            <button type="button" data-value="off">Off</button>
-            <button type="button" data-value="blur">Blur</button>
-            <button type="button" data-value="colour">Colour</button>
+            <button type="button" data-value="off" data-i18n="common_off">Off</button>
+            <button type="button" data-value="blur" data-i18n="common_blur">Blur</button>
+            <button type="button" data-value="colour" data-i18n="common_colour">Colour</button>
           </div>
         </fieldset>
-        <p class="hint experiment-hint">Blur shows a softened video image; Colour follows broad scene colours.</p>
+        <p class="hint experiment-hint" data-i18n="controls_ambience_hint">Blur shows a softened video image; Colour follows broad scene colours.</p>
 
         <fieldset class="experiment-group">
-          <legend>Update rate</legend>
+          <legend data-i18n="controls_update_rate">Update rate</legend>
           <div class="experiment-segments" id="setting-ambienceRate">
-            <button type="button" data-value="high" title="Update ambience every 75 ms." aria-label="Default: update ambience every 75 milliseconds">Default</button>
-            <button type="button" data-value="performance" title="Update ambience every 150 ms." aria-label="Performance: update ambience every 150 milliseconds">Performance</button>
-            <button type="button" data-value="quality" title="Update ambience every 40 ms." aria-label="Quality: update ambience every 40 milliseconds">Quality</button>
+            <button type="button" data-value="high" data-i18n="common_default" data-i18n-title="controls_rate_high_title" data-i18n-aria="controls_rate_high_aria" title="Update ambience every 75 ms." aria-label="Default: update ambience every 75 milliseconds">Default</button>
+            <button type="button" data-value="performance" data-i18n="common_performance" data-i18n-title="controls_rate_performance_title" data-i18n-aria="controls_rate_performance_aria" title="Update ambience every 150 ms." aria-label="Performance: update ambience every 150 milliseconds">Performance</button>
+            <button type="button" data-value="quality" data-i18n="common_quality" data-i18n-title="controls_rate_quality_title" data-i18n-aria="controls_rate_quality_aria" title="Update ambience every 40 ms." aria-label="Quality: update ambience every 40 milliseconds">Quality</button>
           </div>
         </fieldset>
-        <p class="hint experiment-hint">Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.</p>
+        <p class="hint experiment-hint" data-i18n="controls_rate_hint">Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.</p>
       </article>
 
       <!-- Card: Multi-Monitor & Display Profiles -->
       <article class="settings-card">
-        <h2>Display Profiles &amp; Multi-Monitor</h2>
-        <p class="hint">Adapt automatic framing ratios when viewing on ultrawide, 16:10, or multi-display setups.</p>
+        <h2 data-i18n="options_display_profiles_heading">Display Profiles &amp; Multi-Monitor</h2>
+        <p class="hint" data-i18n="options_display_profiles_hint">Adapt automatic framing ratios when viewing on ultrawide, 16:10, or multi-display setups.</p>
 
-        <label for="setting-displayProfile">Display aspect ratio
+        <label for="setting-displayProfile"><span data-i18n="options_display_aspect_ratio">Display aspect ratio</span>
           <select id="setting-displayProfile">
-            <option value="auto">Auto-detect current display (recommended)</option>
-            <option value="16:9">16:9 Standard widescreen (1.78:1)</option>
-            <option value="16:10">16:10 Productivity widescreen (1.60:1)</option>
-            <option value="21:9">21:9 Ultrawide cinematic (2.39:1)</option>
-            <option value="32:9">32:9 Super ultrawide (3.56:1)</option>
-            <option value="custom">Custom ratio…</option>
+            <option value="auto" data-i18n="options_display_ratio_auto">Auto-detect current display (recommended)</option>
+            <option value="16:9" data-i18n="options_display_ratio_16_9">16:9 Standard widescreen (1.78:1)</option>
+            <option value="16:10" data-i18n="options_display_ratio_16_10">16:10 Productivity widescreen (1.60:1)</option>
+            <option value="21:9" data-i18n="options_display_ratio_21_9">21:9 Ultrawide cinematic (2.39:1)</option>
+            <option value="32:9" data-i18n="options_display_ratio_32_9">32:9 Super ultrawide (3.56:1)</option>
+            <option value="custom" data-i18n="options_display_ratio_custom">Custom ratio…</option>
           </select>
         </label>
 
         <div id="custom-ratio-group" style="margin-top: 10px; display: none;">
-          <label for="setting-customDisplayAspectRatio">Custom ratio (width ÷ height)
+          <label for="setting-customDisplayAspectRatio"><span data-i18n="options_custom_ratio_label">Custom ratio (width ÷ height)</span>
             <input type="number" id="setting-customDisplayAspectRatio" min="1.0" max="4.0" step="0.01" value="2.39" style="width: 100%; max-width: 140px;">
           </label>
         </div>
 
         <div class="display-detection-badge" id="display-detection-info" style="margin-top: 12px; padding: 10px 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; font-size: 12px; color: #c8c8cf;">
-          <span id="detected-screen-text">Detecting active display…</span>
+          <span id="detected-screen-text" data-i18n="options_detecting_display">Detecting active display…</span>
         </div>
       </article>
     </div>
 
     <div class="settings-footer">
       <div class="settings-actions">
-        <button type="button" id="settings-save-btn" class="primary-btn">Save global settings</button>
-        <button type="button" id="settings-reset-btn">Restore default settings</button>
+        <button type="button" id="settings-save-btn" class="primary-btn" data-i18n="options_save_global_btn">Save global settings</button>
+        <button type="button" id="settings-reset-btn" data-i18n="options_restore_default_btn">Restore default settings</button>
       </div>
-      <p id="settings-status" role="status" aria-live="polite">Settings apply automatically to new players.</p>
+      <p id="settings-status" role="status" aria-live="polite" data-i18n="options_settings_footer_status">Settings apply automatically to new players.</p>
     </div>
   </section>
 
@@ -191,10 +191,10 @@
   <section id="tab-panel-sites" role="tabpanel" aria-labelledby="tab-btn-sites" class="tab-panel" hidden>
     <div class="sites-header">
       <div>
-        <h2>Saved Site Settings</h2>
-        <p class="hint">Per-site custom settings override global defaults whenever you visit that site. Click "Save site" inside any video player's popup to add a site here.</p>
+        <h2 data-i18n="options_saved_sites_heading">Saved Site Settings</h2>
+        <p class="hint" data-i18n="options_saved_sites_hint">Per-site custom settings override global defaults whenever you visit that site. Click "Save site" inside any video player's popup to add a site here.</p>
       </div>
-      <button type="button" id="sites-clear-all" class="danger-btn">Clear all saved sites</button>
+      <button type="button" id="sites-clear-all" class="danger-btn" data-i18n="options_clear_all_sites_btn">Clear all saved sites</button>
     </div>
 
     <div id="sites-list" class="sites-list">
@@ -207,14 +207,14 @@
   <!-- TAB 3: KEYBOARD SHORTCUTS -->
   <section id="tab-panel-shortcuts" role="tabpanel" aria-labelledby="tab-btn-shortcuts" class="tab-panel" hidden>
     <div class="shortcut-settings" aria-labelledby="shortcut-heading">
-      <h2 id="shortcut-heading">Keyboard shortcuts</h2>
-      <p class="hint">Click a binding, then press your new shortcut. Changes save globally on this device. Use Alt, Ctrl or Meta with a key; Escape cancels recording. Shortcuts follow physical key positions, ignore typing fields, and work on supported web pages.</p>
+      <h2 id="shortcut-heading" data-i18n="options_shortcuts_heading">Keyboard shortcuts</h2>
+      <p class="hint" data-i18n="options_shortcuts_hint">Click a binding, then press your new shortcut. Changes save globally on this device. Use Alt, Ctrl or Meta with a key; Escape cancels recording. Shortcuts follow physical key positions, ignore typing fields, and work on supported web pages.</p>
       <div id="shortcut-list"></div>
       <div class="shortcut-actions">
-        <button id="shortcut-reset" type="button">Restore defaults</button>
-        <button id="shortcut-cancel" type="button" hidden>Cancel recording</button>
+        <button id="shortcut-reset" type="button" data-i18n="options_restore_shortcuts_btn">Restore defaults</button>
+        <button id="shortcut-cancel" type="button" hidden data-i18n="options_cancel_recording_btn">Cancel recording</button>
       </div>
-      <p id="shortcut-status" role="status" aria-live="polite">Shortcuts save automatically.</p>
+      <p id="shortcut-status" role="status" aria-live="polite" data-i18n="options_shortcuts_status">Shortcuts save automatically.</p>
     </div>
   </section>
 
@@ -223,20 +223,20 @@
     <div class="workspace">
       <div class="stage" data-player><video id="video" autoplay muted playsinline controls></video></div>
       <aside>
-        <h2>Build a scene</h2>
-        <label>Picture
+        <h2 data-i18n="options_lab_heading">Build a scene</h2>
+        <label><span data-i18n="options_lab_picture_label">Picture</span>
           <select id="scene">
-            <option value="clean">Full frame</option>
-            <option value="letterbox">Letterbox</option>
-            <option value="pillarbox">Pillarbox</option>
-            <option value="windowbox">Windowbox</option>
-            <option value="asymmetric">Asymmetric bars</option>
-            <option value="gray">Dark gray bars</option>
-            <option value="dark">Dark scene</option>
-            <option value="changing">Changing aspect ratio</option>
+            <option value="clean" data-i18n="options_lab_scene_clean">Full frame</option>
+            <option value="letterbox" data-i18n="options_lab_scene_letterbox">Letterbox</option>
+            <option value="pillarbox" data-i18n="options_lab_scene_pillarbox">Pillarbox</option>
+            <option value="windowbox" data-i18n="options_lab_scene_windowbox">Windowbox</option>
+            <option value="asymmetric" data-i18n="options_lab_scene_asymmetric">Asymmetric bars</option>
+            <option value="gray" data-i18n="options_lab_scene_gray">Dark gray bars</option>
+            <option value="dark" data-i18n="options_lab_scene_dark">Dark scene</option>
+            <option value="changing" data-i18n="options_lab_scene_changing">Changing aspect ratio</option>
           </select>
         </label>
-        <label>Player shape
+        <label><span data-i18n="options_lab_player_shape">Player shape</span>
           <select id="shape">
             <option value="16 / 9">16:9</option>
             <option value="21 / 9">Ultrawide 21:9</option>
@@ -244,13 +244,13 @@
             <option value="9 / 16">Portrait</option>
           </select>
         </label>
-        <label class="check"><input id="subtitle" type="checkbox"> Subtitles across bottom bar</label>
-        <label class="check"><input id="logo" type="checkbox"> Corner logo</label>
+        <label class="check"><input id="subtitle" type="checkbox"> <span data-i18n="options_lab_subtitles_label">Subtitles across bottom bar</span></label>
+        <label class="check"><input id="logo" type="checkbox"> <span data-i18n="options_lab_logo_label">Corner logo</span></label>
         <div class="actions">
-          <button id="fullscreen" type="button">Fullscreen player</button>
-          <button id="replace" type="button">Replace video</button>
+          <button id="fullscreen" type="button" data-i18n="options_lab_fullscreen_btn">Fullscreen player</button>
+          <button id="replace" type="button" data-i18n="options_lab_replace_btn">Replace video</button>
         </div>
-        <p class="hint">Test your settings and shortcuts on live synthetic content. Generic HTML5 native controls are mounted at the bottom right.</p>
+        <p class="hint" data-i18n="options_lab_hint">Test your settings and shortcuts on live synthetic content. Generic HTML5 native controls are mounted at the bottom right.</p>
       </aside>
     </div>
   </section>
@@ -259,8 +259,8 @@
   <section id="tab-panel-info" role="tabpanel" aria-labelledby="tab-btn-info" class="tab-panel" hidden>
     <div class="info-container">
       <article class="settings-card">
-        <h2>Tested &amp; Supported Players</h2>
-        <p class="hint">The following players have dedicated in-player button integration:</p>
+        <h2 data-i18n="options_info_players_heading">Tested &amp; Supported Players</h2>
+        <p class="hint" data-i18n="options_info_players_hint">The following players have dedicated in-player button integration:</p>
         <ul class="players-list">
           <li><strong>YouTube</strong> — Native in-player button</li>
           <li><strong>Netflix</strong> — Native in-player button</li>
@@ -268,7 +268,7 @@
           <li><strong>Disney+</strong> — Native in-player button</li>
         </ul>
 
-        <h2 style="margin-top: 28px;">HTML5 Native Video Controls Workaround</h2>
+        <h2 style="margin-top: 28px;" data-i18n="options_info_native_heading">HTML5 Native Video Controls Workaround</h2>
         <p class="hint">Standard browser <code>&lt;video controls&gt;</code> players scale their built-in controls when CSS transforms are applied to the video element, causing the toolbar to be pushed off-screen at higher zoom levels and breaking in fullscreen due to browser top-layer occlusion. <strong>just_zoom</strong> provides a native HTML5 workaround that isolates the video in an unscaled Shadow DOM player container with a 1:1 pixel-faithful controls bar:</p>
         <ul class="players-list">
           <li><strong>Playback &amp; Timeline:</strong> Play/Pause/Replay toggle, precision scrub timeline with buffered progress, and hover timestamp preview.</li>
@@ -279,13 +279,13 @@
           <li><strong>Shortcuts &amp; Auto-Hide:</strong> Space/K for play, arrows for scrub/volume, F for fullscreen, M for mute, and cursor auto-suppression on idle.</li>
         </ul>
 
-        <h2 style="margin-top: 28px;">Generic HTML5 &amp; Other Players</h2>
-        <p class="hint">For generic player frameworks (such as Video.js, Plyr, JW Player, Shaka) and streaming sites without dedicated adapters, just_zoom automatically provides the non-intrusive floating popup button. This ensures zoom and framing controls are always readily accessible without risking layout collisions or breaking custom player toolbars.</p>
+        <h2 style="margin-top: 28px;" data-i18n="options_info_generic_heading">Generic HTML5 &amp; Other Players</h2>
+        <p class="hint" data-i18n="options_info_generic_desc">For generic player frameworks (such as Video.js, Plyr, JW Player, Shaka) and streaming sites without dedicated adapters, just_zoom automatically provides the non-intrusive floating popup button. This ensures zoom and framing controls are always readily accessible without risking layout collisions or breaking custom player toolbars.</p>
 
-        <h2 style="margin-top: 28px;">Ambience Lighting</h2>
-        <p class="hint">Ambience currently works on non-DRM protected videos (such as YouTube and standard HTML5 video). Hardware DRM on platforms like Netflix, Disney+, and Prime Video prevents direct frame sampling, so Ambience remains inactive on those streams.</p>
+        <h2 style="margin-top: 28px;" data-i18n="options_info_ambience_heading">Ambience Lighting</h2>
+        <p class="hint" data-i18n="options_info_ambience_desc">Ambience currently works on non-DRM protected videos (such as YouTube and standard HTML5 video). Hardware DRM on platforms like Netflix, Disney+, and Prime Video prevents direct frame sampling, so Ambience remains inactive on those streams.</p>
 
-        <h2 style="margin-top: 28px;">Feedback &amp; Bug Reports</h2>
+        <h2 style="margin-top: 28px;" data-i18n="options_info_feedback_heading">Feedback &amp; Bug Reports</h2>
         <p class="hint">Willing to help me support more players or report a bug? Email me at <a href="mailto:placeholder@email.com" class="email-link">placeholder@email.com</a>.</p>
       </article>
     </div>
@@ -295,13 +295,13 @@
   <section id="tab-panel-experimental" role="tabpanel" aria-labelledby="tab-btn-experimental" class="tab-panel" hidden>
     <div class="settings-grid">
       <article class="settings-card" style="grid-column: 1 / -1; max-width: 800px;">
-        <h2>Shadow DOM Video Discovery</h2>
-        <p class="hint">Configure how just_zoom scans for video elements nested inside open Shadow DOM roots when no direct document video is detected.</p>
+        <h2 data-i18n="options_experimental_treewalker_title">Shadow DOM Video Discovery</h2>
+        <p class="hint" data-i18n="options_experimental_treewalker_desc">Configure how just_zoom scans for video elements nested inside open Shadow DOM roots when no direct document video is detected.</p>
 
-        <label for="setting-videoFinderMode">Discovery algorithm
+        <label for="setting-videoFinderMode"><span data-i18n="options_experimental_discovery_algo">Discovery algorithm</span>
           <select id="setting-videoFinderMode">
-            <option value="treewalker">TreeWalker (Default · Fast, low memory, pointer-based traversal)</option>
-            <option value="bruteforce">Brute-Force (querySelectorAll · Allocates full DOM node list)</option>
+            <option value="treewalker" data-i18n="options_experimental_algo_treewalker">TreeWalker (Default · Fast, low memory, pointer-based traversal)</option>
+            <option value="bruteforce" data-i18n="options_experimental_algo_bruteforce">Brute-Force (querySelectorAll · Allocates full DOM node list)</option>
           </select>
         </label>
         <p class="hint">
@@ -311,13 +311,13 @@
       </article>
 
       <article class="settings-card" style="grid-column: 1 / -1; max-width: 800px; margin-top: 20px;">
-        <h2>HTML5 Native Video Controls Workaround</h2>
-        <p class="hint">Replaces standard browser <code>&lt;video controls&gt;</code> with an unscaled, pixel-faithful Shadow DOM controls bar. This prevents player controls from zooming off-screen at high zoom levels and resolves Chromium fullscreen top-layer occlusion bugs.</p>
+        <h2 data-i18n="options_experimental_native_workaround_title">HTML5 Native Video Controls Workaround</h2>
+        <p class="hint" data-i18n="options_experimental_native_workaround_desc">Replaces standard browser <code>&lt;video controls&gt;</code> with an unscaled, pixel-faithful Shadow DOM controls bar. This prevents player controls from zooming off-screen at high zoom levels and resolves Chromium fullscreen top-layer occlusion bugs.</p>
 
         <div class="toggles-list" style="margin-top: 12px;">
           <label class="check">
             <input type="checkbox" id="setting-nativeHtml5Workaround">
-            <span><strong>Enable HTML5 native player controls workaround (Recommended)</strong></span>
+            <span><strong data-i18n="options_experimental_native_workaround_enable">Enable HTML5 native player controls workaround (Recommended)</strong></span>
           </label>
         </div>
         <p class="hint" style="margin-top: 8px;">
@@ -325,7 +325,7 @@
         </p>
 
         <div class="settings-actions" style="margin-top: 24px; display: flex; align-items: center; gap: 16px;">
-          <button type="button" id="experimental-save-btn" class="primary-btn">Save Experimental Settings</button>
+          <button type="button" id="experimental-save-btn" class="primary-btn" data-i18n="options_experimental_save_btn">Save Experimental Settings</button>
           <span id="experimental-status" class="status-msg"></span>
         </div>
       </article>
@@ -333,24 +333,24 @@
   </section>
 
   <section class="help">
-    <h2>Ready for your videos</h2>
+    <h2 data-i18n="options_help_ready">Ready for your videos</h2>
     <div class="columns">
       <article>
-        <h3>Fit &amp; fill</h3>
-        <p>Fit keeps the entire picture. Fill covers the player. Zoom and pan take manual control; Reset returns to centered Fit.</p>
+        <h3 data-i18n="options_help_fit_fill_title">Fit &amp; fill</h3>
+        <p data-i18n="options_help_fit_fill_text">Fit keeps the entire picture. Fill covers the player. Zoom and pan take manual control; Reset returns to centered Fit.</p>
       </article>
       <article>
-        <h3>Remember your choice</h3>
-        <p>Changes apply to this player immediately. Save for this site or save as the global default from the controls. Site preferences take priority.</p>
+        <h3 data-i18n="options_help_remember_title">Remember your choice</h3>
+        <p data-i18n="options_help_remember_text">Changes apply to this player immediately. Save for this site or save as the global default from the controls. Site preferences take priority.</p>
       </article>
       <article>
-        <h3>Local and private</h3>
-        <p>All processing is 100% on your device. No user accounts, remote trackers, analytics, video uploads, or subscriptions.</p>
+        <h3 data-i18n="options_help_local_title">Local and private</h3>
+        <p data-i18n="options_help_local_text">All processing is 100% on your device. No user accounts, remote trackers, analytics, video uploads, or subscriptions.</p>
       </article>
     </div>
   </section>
 
-  <footer>just_zoom · No accounts, telemetry, uploads or remote configuration.</footer>
+  <footer data-i18n="options_footer">just_zoom · No accounts, telemetry, uploads or remote configuration.</footer>
 </main>
 <script type="module" src="./main.ts"></script>
 </body>

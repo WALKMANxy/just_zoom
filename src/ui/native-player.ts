@@ -1,4 +1,5 @@
 import type { ControlsHandlers, PlayerBinding, Settings } from '../shared/types';
+import { i18n } from '#i18n';
 
 export interface NativePlayerController {
   update(settings: Settings): void;
@@ -607,7 +608,7 @@ export function createNativePlayer(
   const playBtn = document.createElement('button');
   playBtn.className = 'jz-btn jz-play-btn';
   playBtn.type = 'button';
-  playBtn.setAttribute('aria-label', 'Play');
+  playBtn.setAttribute('aria-label', i18n.t('player_play'));
   playBtn.innerHTML = ICONS.play;
 
   const timeDisplay = document.createElement('div');
@@ -654,7 +655,7 @@ export function createNativePlayer(
   const volTrack = document.createElement('div');
   volTrack.className = 'jz-volume-track';
   volTrack.setAttribute('role', 'slider');
-  volTrack.setAttribute('aria-label', 'Volume');
+  volTrack.setAttribute('aria-label', i18n.t('player_volume'));
   volTrack.setAttribute('aria-valuemin', '0');
   volTrack.setAttribute('aria-valuemax', '100');
   volTrack.setAttribute('aria-valuenow', `${Math.round((video.muted ? 0 : video.volume) * 100)}`);
@@ -671,7 +672,7 @@ export function createNativePlayer(
   const volBtn = document.createElement('button');
   volBtn.className = 'jz-btn jz-vol-btn';
   volBtn.type = 'button';
-  volBtn.setAttribute('aria-label', 'Mute');
+  volBtn.setAttribute('aria-label', i18n.t('player_mute'));
   volBtn.innerHTML = ICONS.volHigh;
 
   volGroup.append(volPopup, volBtn);
@@ -680,8 +681,8 @@ export function createNativePlayer(
   const zoomBtn = document.createElement('button');
   zoomBtn.className = 'jz-btn jz-zoom-btn';
   zoomBtn.type = 'button';
-  zoomBtn.setAttribute('aria-label', 'Toggle Zoom');
-  zoomBtn.title = 'Toggle Zoom (Right-click: Quick Controls)';
+  zoomBtn.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
+  zoomBtn.title = i18n.t('player_zoom_btn_title');
   zoomBtn.innerHTML = ICONS.zoom;
 
   // 3-dots options menu
@@ -691,8 +692,8 @@ export function createNativePlayer(
   const optionsBtn = document.createElement('button');
   optionsBtn.className = 'jz-btn jz-options-btn';
   optionsBtn.type = 'button';
-  optionsBtn.setAttribute('aria-label', 'Playback options');
-  optionsBtn.title = 'Playback options';
+  optionsBtn.setAttribute('aria-label', i18n.t('player_options'));
+  optionsBtn.title = i18n.t('player_options');
   optionsBtn.innerHTML = ICONS.options;
 
   const menu = document.createElement('div');
@@ -702,7 +703,7 @@ export function createNativePlayer(
   // 1. Playback Speed item
   const speedItem = document.createElement('div');
   speedItem.className = 'jz-menu-item jz-speed-item';
-  speedItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.speed}</span><span>Playback speed</span></div><span class="jz-menu-val jz-speed-val">1×</span>`;
+  speedItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.speed}</span><span>${i18n.t('player_speed')}</span></div><span class="jz-menu-val jz-speed-val">1×</span>`;
 
   const speedList = document.createElement('div');
   speedList.className = 'jz-speed-list';
@@ -713,7 +714,7 @@ export function createNativePlayer(
     const opt = document.createElement('div');
     opt.className = `jz-speed-opt ${sp === (video.playbackRate || 1) ? 'is-selected' : ''}`;
     opt.dataset.speed = `${sp}`;
-    opt.textContent = sp === 1 ? 'Normal (1×)' : `${sp}×`;
+    opt.textContent = sp === 1 ? i18n.t('player_speed_normal') : `${sp}×`;
     opt.addEventListener('click', (e) => {
       e.stopPropagation();
       video.playbackRate = sp;
@@ -735,7 +736,7 @@ export function createNativePlayer(
   // 2. Picture in Picture item
   const pipItem = document.createElement('div');
   pipItem.className = 'jz-menu-item jz-pip-item';
-  pipItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.pip}</span><span>Picture in Picture</span></div>`;
+  pipItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.pip}</span><span>${i18n.t('player_pip')}</span></div>`;
   pipItem.addEventListener('click', async (e) => {
     e.stopPropagation();
     menu.hidden = true;
@@ -751,7 +752,7 @@ export function createNativePlayer(
   // 3. Download item
   const downloadItem = document.createElement('div');
   downloadItem.className = 'jz-menu-item jz-download-item';
-  downloadItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.download}</span><span>Download</span></div>`;
+  downloadItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.download}</span><span>${i18n.t('player_download')}</span></div>`;
   downloadItem.addEventListener('click', (e) => {
     e.stopPropagation();
     menu.hidden = true;
@@ -773,7 +774,7 @@ export function createNativePlayer(
   const fsBtn = document.createElement('button');
   fsBtn.className = 'jz-btn jz-fs-btn';
   fsBtn.type = 'button';
-  fsBtn.setAttribute('aria-label', 'Fullscreen');
+  fsBtn.setAttribute('aria-label', i18n.t('player_fullscreen'));
   fsBtn.innerHTML = ICONS.fsEnter;
 
   bar.append(playBtn, timeDisplay, timelineWrap, volGroup, zoomBtn, optionsGroup, fsBtn);
@@ -1059,10 +1060,13 @@ export function createNativePlayer(
   const onPlayPause = () => {
     if (video.ended) {
       playBtn.innerHTML = ICONS.replay;
+      playBtn.setAttribute('aria-label', i18n.t('player_replay'));
     } else if (video.paused) {
       playBtn.innerHTML = ICONS.play;
+      playBtn.setAttribute('aria-label', i18n.t('player_play'));
     } else {
       playBtn.innerHTML = ICONS.pause;
+      playBtn.setAttribute('aria-label', i18n.t('player_pause'));
     }
     showControls();
   };

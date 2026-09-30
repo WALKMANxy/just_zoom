@@ -1,5 +1,6 @@
 import type { GestureModifier, ZoomAction } from './types';
 import { isContextInvalidationError, isContextValid, markContextInvalid } from './storage';
+import { i18n } from '#i18n';
 
 export interface Shortcut { code: string; alt: boolean; ctrl: boolean; shift: boolean; meta: boolean }
 export type ShortcutMap = Record<ZoomAction, Shortcut | null>;
@@ -17,12 +18,26 @@ export const SHORTCUT_ACTIONS: readonly ZoomAction[] = [
   'pan-up',
   'pan-down',
 ];
-export const SHORTCUT_LABELS: Record<ZoomAction, string> = {
-  'toggle-zoom': 'Toggle zoom', 'zoom-in': 'Zoom in', 'zoom-out': 'Zoom out',
-  'toggle-auto-crop': 'Toggle Auto Crop', 'toggle-ambience': 'Toggle Ambience',
-  reset: 'Reset framing', 'reset-pan': 'Reset pan', 'toggle-controls': 'Show or hide controls',
-  'pan-left': 'Pan left', 'pan-right': 'Pan right', 'pan-up': 'Pan up', 'pan-down': 'Pan down',
-};
+export function getShortcutLabel(action: ZoomAction): string {
+  switch (action) {
+    case 'toggle-zoom': return i18n.t('shortcut_toggle_zoom');
+    case 'zoom-in': return i18n.t('shortcut_zoom_in');
+    case 'zoom-out': return i18n.t('shortcut_zoom_out');
+    case 'toggle-auto-crop': return i18n.t('shortcut_toggle_auto_crop');
+    case 'toggle-ambience': return i18n.t('shortcut_toggle_ambience');
+    case 'reset': return i18n.t('shortcut_reset');
+    case 'reset-pan': return i18n.t('shortcut_reset_pan');
+    case 'toggle-controls': return i18n.t('shortcut_toggle_controls');
+    case 'pan-left': return i18n.t('shortcut_pan_left');
+    case 'pan-right': return i18n.t('shortcut_pan_right');
+    case 'pan-up': return i18n.t('shortcut_pan_up');
+    case 'pan-down': return i18n.t('shortcut_pan_down');
+    default: return action;
+  }
+}
+export const SHORTCUT_LABELS: Record<ZoomAction, string> = new Proxy({} as Record<ZoomAction, string>, {
+  get: (_, prop: string) => getShortcutLabel(prop as ZoomAction),
+});
 const alt = (code: string, shift = false): Shortcut => ({ code, alt: true, shift, ctrl: false, meta: false });
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
   'toggle-zoom': alt('KeyZ', true), 'zoom-in': alt('Equal'), 'zoom-out': alt('Minus'),
@@ -63,7 +78,7 @@ export function formatModifier(modifier: GestureModifier = 'alt'): string {
 }
 
 export function formatShortcut(binding: Shortcut | null): string {
-  if (!binding) return 'Unbound';
+  if (!binding) return i18n.t('shortcut_unbound');
   const names: Record<string, string> = { Equal: '=', Minus: '−', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Space: 'Space', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', Backquote: '`' };
   const key = names[binding.code] || binding.code.replace(/^Key|^Digit/, '').replace(/^Numpad/, 'Num ');
   const mac = isMac();
@@ -76,9 +91,14 @@ export function validateShortcuts(map: ShortcutMap): string | null {
   const seen = new Map<string, ZoomAction>();
   for (const action of SHORTCUT_ACTIONS) {
     const binding = map[action]; if (binding === null) continue;
-    if (!valid(binding)) return `${SHORTCUT_LABELS[action]} needs a supported key with ${isMac() ? 'Option, Control or Command' : 'Alt, Ctrl or Meta'}.`;
+    if (!valid(binding)) {
+      const modifierReq = isMac() ? 'Option, Control or Command' : 'Alt, Ctrl or Meta';
+      return i18n.t('shortcut_validation_need_key', [SHORTCUT_LABELS[action], modifierReq]);
+    }
     const duplicate = seen.get(identity(binding));
-    if (duplicate) return `${formatShortcut(binding)} is already assigned to ${SHORTCUT_LABELS[duplicate].toLowerCase()}.`;
+    if (duplicate) {
+      return i18n.t('shortcut_validation_duplicate', [formatShortcut(binding), SHORTCUT_LABELS[duplicate].toLowerCase()]);
+    }
     seen.set(identity(binding), action);
   }
   return null;

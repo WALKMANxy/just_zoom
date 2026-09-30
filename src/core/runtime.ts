@@ -10,6 +10,7 @@ import { automaticZoomFactor, getDisplayAspectBucket, portraitBlocked } from './
 import { attachShortcuts } from '../shared/shortcuts';
 import { attachGestures, type GesturesController } from './gestures';
 import { createHud, type HudController } from '../ui/hud';
+import { i18n } from '#i18n';
 
 export function startRuntime(): () => void {
   const hostname = location.hostname;
@@ -58,7 +59,7 @@ export function startRuntime(): () => void {
             update();
             if (settings.hudEnabled) {
               const factor = automaticZoomFactor(settings.displayProfile, settings.customDisplayAspectRatio);
-              showHud(`${bucket.toUpperCase()} Display (${factor.toFixed(2)}×)`, 'mode');
+              showHud(i18n.t('hud_display_profile', [bucket.toUpperCase(), factor.toFixed(2)]), 'mode');
             }
           }
         });
@@ -70,7 +71,7 @@ export function startRuntime(): () => void {
         update();
         if (settings.hudEnabled) {
           const factor = automaticZoomFactor(settings.displayProfile, settings.customDisplayAspectRatio);
-          showHud(`Screen: ${sw}×${sh} (${factor.toFixed(2)}×)`, 'mode');
+          showHud(i18n.t('hud_screen_profile', [String(sw), String(sh), factor.toFixed(2)]), 'mode');
         }
       }
     }
@@ -124,14 +125,14 @@ export function startRuntime(): () => void {
         getSettings: () => settings,
         onPan: (panX, panY) => {
           patch({ panX, panY }, true);
-          if (panX === 0 && panY === 0) showHud('Pan Centered', 'pan', true);
-          else showHud(`Pan ${Math.round(panX * 100)}%, ${Math.round(panY * 100)}%`, 'pan', true);
+          if (panX === 0 && panY === 0) showHud(i18n.t('hud_pan_centered'), 'pan', true);
+          else showHud(i18n.t('hud_pan_offset', [String(Math.round(panX * 100)), String(Math.round(panY * 100))]), 'pan', true);
         },
         onZoom: (zoom) => {
           crop = { ...EMPTY_CROP };
           effects?.reset();
           patch({ zoom, zoomApplied: true, zoomStrategy: 'manual', zoomType: 'factor', autoCrop: false }, true);
-          showHud(`Zoom ${zoom.toFixed(2)}×`, 'zoom', true);
+          showHud(i18n.t('hud_zoom_level', [zoom.toFixed(2)]), 'zoom', true);
         },
       });
     }
@@ -158,8 +159,8 @@ export function startRuntime(): () => void {
     if (change.autoCrop === true) change = { ...change, zoomApplied: true };
     const willToggle = change.zoomApplied !== undefined && change.zoomApplied !== settings.zoomApplied;
     settings = normalizeSettings(change, settings); update(willToggle, immediate);
-    if (change.mode === 'fit' && (change.zoomApplied ?? settings.zoomApplied)) showHud('Fit', 'mode');
-    else if (change.mode === 'fill' && (change.zoomApplied ?? settings.zoomApplied)) showHud('Fill', 'mode');
+    if (change.mode === 'fit' && (change.zoomApplied ?? settings.zoomApplied)) showHud(i18n.t('hud_fit'), 'mode');
+    else if (change.mode === 'fill' && (change.zoomApplied ?? settings.zoomApplied)) showHud(i18n.t('hud_fill'), 'mode');
     if (change.enabled !== undefined) { void save('global'); }
     const stateEdit = manualEdit || change.zoomApplied !== undefined || change.zoomStrategy !== undefined || change.zoomType !== undefined || change.mode !== undefined || change.ambience !== undefined || change.ambienceRate !== undefined || change.buttonFactor !== undefined || change.buttonUseLast !== undefined || change.buttonAction !== undefined || change.controlMode !== undefined || change.gesturesEnabled !== undefined || change.gestureModifier !== undefined || change.hudEnabled !== undefined || change.displayProfile !== undefined || change.customDisplayAspectRatio !== undefined;
     if (change.rememberSiteState !== undefined || (stateEdit && settings.rememberSiteState)) {
@@ -171,7 +172,7 @@ export function startRuntime(): () => void {
   const reset = () => {
     settings = normalizeSettings({ mode: 'fit', zoomApplied: false, panX: 0, panY: 0, autoCrop: false }, settings);
     crop = { ...EMPTY_CROP }; effects?.reset(); update();
-    showHud('Framing Reset', 'reset');
+    showHud(i18n.t('hud_framing_reset'), 'reset');
     if (settings.rememberSiteState) {
       localEditRevision++; localSettingsDirty = true;
       clearTimeout(siteSaveTimer);
@@ -180,7 +181,7 @@ export function startRuntime(): () => void {
   };
   const resetPan = () => {
     patch({ panX: 0, panY: 0 });
-    showHud('Pan Centered', 'reset');
+    showHud(i18n.t('hud_pan_centered'), 'reset');
   };
   const action = (value: ZoomAction) => {
     const currentFactor = settings.autoCrop ? 1 : settings.zoomStrategy === 'manual' ? settings.zoom
@@ -189,21 +190,21 @@ export function startRuntime(): () => void {
       case 'toggle-zoom': {
         const next = !settings.zoomApplied;
         patch({ zoomApplied: next });
-        showHud(next ? `Zoom ${settings.zoom.toFixed(2)}×` : 'Zoom Off', 'zoom');
+        showHud(next ? i18n.t('hud_zoom_level', [settings.zoom.toFixed(2)]) : i18n.t('hud_zoom_off'), 'zoom');
         break;
       }
       case 'zoom-in': {
         const factor = Math.min(3, +(currentFactor * 1.05).toFixed(2));
         crop = { ...EMPTY_CROP }; effects?.reset();
         patch({ zoom: factor, zoomApplied: true, zoomStrategy: 'manual', autoCrop: false, zoomType: 'factor' });
-        showHud(`Zoom ${factor.toFixed(2)}×`, 'zoom');
+        showHud(i18n.t('hud_zoom_level', [factor.toFixed(2)]), 'zoom');
         break;
       }
       case 'zoom-out': {
         const factor = Math.max(.34, +(currentFactor / 1.05).toFixed(2));
         crop = { ...EMPTY_CROP }; effects?.reset();
         patch({ zoom: factor, zoomApplied: true, zoomStrategy: 'manual', autoCrop: false, zoomType: 'factor' });
-        showHud(`Zoom ${factor.toFixed(2)}×`, 'zoom');
+        showHud(i18n.t('hud_zoom_level', [factor.toFixed(2)]), 'zoom');
         break;
       }
       case 'toggle-auto-crop':
@@ -211,7 +212,7 @@ export function startRuntime(): () => void {
       case 'toggle-ambience': {
         const next = settings.ambience === 'off' ? 'blur' : 'off';
         patch({ ambience: next });
-        showHud(next === 'off' ? 'Ambience Off' : `Ambience ${next === 'blur' ? 'Blur' : 'Colour'}`, 'ambience');
+        showHud(next === 'off' ? i18n.t('hud_ambience_off') : next === 'blur' ? i18n.t('hud_ambience_blur') : i18n.t('hud_ambience_colour'), 'ambience');
         break;
       }
       case 'toggle-controls': controls?.toggle(); break;
@@ -220,25 +221,25 @@ export function startRuntime(): () => void {
       case 'pan-left': {
         const p = Math.max(-1, +(settings.panX - .05).toFixed(2));
         patch({ panX: p });
-        showHud(p === 0 && settings.panY === 0 ? 'Pan Centered' : `Pan ${Math.round(p * 100)}%, ${Math.round(settings.panY * 100)}%`, 'pan');
+        showHud(p === 0 && settings.panY === 0 ? i18n.t('hud_pan_centered') : i18n.t('hud_pan_offset', [String(Math.round(p * 100)), String(Math.round(settings.panY * 100))]), 'pan');
         break;
       }
       case 'pan-right': {
         const p = Math.min(1, +(settings.panX + .05).toFixed(2));
         patch({ panX: p });
-        showHud(p === 0 && settings.panY === 0 ? 'Pan Centered' : `Pan ${Math.round(p * 100)}%, ${Math.round(settings.panY * 100)}%`, 'pan');
+        showHud(p === 0 && settings.panY === 0 ? i18n.t('hud_pan_centered') : i18n.t('hud_pan_offset', [String(Math.round(p * 100)), String(Math.round(settings.panY * 100))]), 'pan');
         break;
       }
       case 'pan-up': {
         const p = Math.max(-1, +(settings.panY - .05).toFixed(2));
         patch({ panY: p });
-        showHud(settings.panX === 0 && p === 0 ? 'Pan Centered' : `Pan ${Math.round(settings.panX * 100)}%, ${Math.round(p * 100)}%`, 'pan');
+        showHud(settings.panX === 0 && p === 0 ? i18n.t('hud_pan_centered') : i18n.t('hud_pan_offset', [String(Math.round(settings.panX * 100)), String(Math.round(p * 100))]), 'pan');
         break;
       }
       case 'pan-down': {
         const p = Math.min(1, +(settings.panY + .05).toFixed(2));
         patch({ panY: p });
-        showHud(settings.panX === 0 && p === 0 ? 'Pan Centered' : `Pan ${Math.round(settings.panX * 100)}%, ${Math.round(p * 100)}%`, 'pan');
+        showHud(settings.panX === 0 && p === 0 ? i18n.t('hud_pan_centered') : i18n.t('hud_pan_offset', [String(Math.round(settings.panX * 100)), String(Math.round(p * 100))]), 'pan');
         break;
       }
     }
@@ -246,42 +247,42 @@ export function startRuntime(): () => void {
   const activate = () => {
     if (settings.zoomApplied) {
       patch({ zoomApplied: false });
-      showHud('Zoom Off', 'zoom');
+      showHud(i18n.t('hud_zoom_off'), 'zoom');
       return;
     }
     if (settings.buttonAction === 'auto-zoom') {
       patch({ autoCrop: true, zoomApplied: true });
-      showHud('Auto Framing', 'zoom');
+      showHud(i18n.t('hud_auto_framing'), 'zoom');
       return;
     }
     if (settings.buttonUseLast) {
       if (settings.zoomType === 'quick') {
         patch({ zoomApplied: true, zoomType: 'quick', mode: settings.mode });
-        showHud(settings.mode === 'fill' ? 'Fill' : 'Fit', 'mode');
+        showHud(settings.mode === 'fill' ? i18n.t('hud_fill') : i18n.t('hud_fit'), 'mode');
         return;
       }
       if (settings.zoomType === 'factor' && settings.zoomStrategy === 'automatic') {
         patch({ zoomApplied: true, zoomType: 'factor', zoomStrategy: 'automatic' });
-        showHud('Screen Ratio', 'mode');
+        showHud(i18n.t('hud_screen_ratio'), 'mode');
         return;
       }
       if (settings.autoCrop) {
         patch({ autoCrop: true, zoomApplied: true });
-        showHud('Auto Framing', 'zoom');
+        showHud(i18n.t('hud_auto_framing'), 'zoom');
         return;
       }
       const factor = settings.zoom < 1 ? 1 / settings.zoom : settings.zoom;
       crop = { ...EMPTY_CROP }; effects?.reset();
       const nextZoom = settings.buttonAction === 'zoom-out' ? 1 / factor : factor;
       patch({ zoom: nextZoom, zoomApplied: true, zoomStrategy: 'manual', zoomType: 'factor', autoCrop: false });
-      showHud(`Zoom ${nextZoom.toFixed(2)}×`, 'zoom');
+      showHud(i18n.t('hud_zoom_level', [nextZoom.toFixed(2)]), 'zoom');
       return;
     }
     const factor = settings.buttonFactor < 1 ? 1 / settings.buttonFactor : settings.buttonFactor;
     crop = { ...EMPTY_CROP }; effects?.reset();
     const nextZoom = settings.buttonAction === 'zoom-out' ? 1 / factor : factor;
     patch({ zoom: nextZoom, zoomApplied: true, zoomStrategy: 'manual', zoomType: 'factor', autoCrop: false });
-    showHud(`Zoom ${nextZoom.toFixed(2)}×`, 'zoom');
+    showHud(i18n.t('hud_zoom_level', [nextZoom.toFixed(2)]), 'zoom');
   };
   const save = async (scope: 'site' | 'global') => {
     const revision = localEditRevision, value = settings;

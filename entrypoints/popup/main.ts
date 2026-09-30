@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, type RuntimeSnapshot, type Settings } from '../../src
 import { formatModifier } from '../../src/shared/shortcuts';
 import './style.css';
 import { AUTO_CROP_AVAILABLE } from '../../src/shared/features';
+import { i18n } from '#i18n';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let snapshot: RuntimeSnapshot = { available: false, hostname: '', adapter: '', settings: DEFAULT_SETTINGS, status: { source: 'idle', message: 'Loading…' } };
@@ -33,10 +34,10 @@ function run(command: unknown) {
       } catch { /* fallback to background */ }
     }
     const result = await chrome.runtime.sendMessage({ type: 'JZ_POPUP_COMMAND', command });
-    if (!result?.settings) throw new Error(result?.error || 'Could not update the player.');
+    if (!result?.settings) throw new Error(result?.error || i18n.t('popup_error_player'));
     snapshot = result;
     render();
-  }).catch(error => reportError(error instanceof Error ? error.message : 'Could not update settings.'));
+  }).catch(error => reportError(error instanceof Error ? error.message : i18n.t('popup_error_update')));
 }
 
 const patch = (value: Partial<Settings>) => run({ type: 'JZ_PATCH', patch: value });
@@ -127,13 +128,13 @@ function render() {
   const { settings: s, available } = snapshot;
   app.replaceChildren(node('h1', 'just_zoom'));
   const hostLabel = snapshot.hostname
-    ? (available ? snapshot.hostname : `${snapshot.hostname} · no active video`)
-    : 'Global defaults · no active video';
+    ? (available ? snapshot.hostname : i18n.t('popup_no_active_video', [snapshot.hostname]))
+    : i18n.t('popup_global_defaults_no_video');
   app.append(node('p', hostLabel, 'subtitle'));
 
   // Master Enable / Disable Toggle
   const masterToggle = button(
-    s.enabled ? 'just_zoom: Enabled' : 'just_zoom: Disabled',
+    s.enabled ? i18n.t('popup_enabled_label') : i18n.t('popup_disabled_label'),
     () => patch({ enabled: !s.enabled }),
   );
   masterToggle.className = `master-toggle ${s.enabled ? 'active' : 'inactive'}`;
@@ -146,18 +147,18 @@ function render() {
   // Quick zoom section
   const quickZoomSection = node('section', '', `zoom-section ${s.zoomType === 'factor' ? 'dimmed' : ''}`);
   const quickGroup = node('fieldset');
-  quickGroup.append(node('legend', 'Quick zoom'));
+  quickGroup.append(node('legend', i18n.t('controls_quick_zoom')));
   const quickRow = node('div', '', 'segments');
 
-  const quickOff = button('Off', () => patch({ zoomApplied: false, zoomType: 'quick' }));
+  const quickOff = button(i18n.t('common_off'), () => patch({ zoomApplied: false, zoomType: 'quick' }));
   quickOff.setAttribute('aria-pressed', String(!s.zoomApplied && s.zoomType === 'quick'));
   quickRow.append(quickOff);
 
-  const quickFit = button('Fit', () => patch({ mode: 'fit', zoomType: 'quick', zoomApplied: true }));
+  const quickFit = button(i18n.t('common_fit'), () => patch({ mode: 'fit', zoomType: 'quick', zoomApplied: true }));
   quickFit.setAttribute('aria-pressed', String(s.zoomApplied && s.zoomType === 'quick' && s.mode === 'fit'));
   quickRow.append(quickFit);
 
-  const quickFill = button('Fill', () => patch({ mode: 'fill', zoomType: 'quick', zoomApplied: true }));
+  const quickFill = button(i18n.t('common_fill'), () => patch({ mode: 'fill', zoomType: 'quick', zoomApplied: true }));
   quickFill.setAttribute('aria-pressed', String(s.zoomApplied && s.zoomType === 'quick' && s.mode === 'fill'));
   quickRow.append(quickFill);
 
@@ -168,7 +169,7 @@ function render() {
   // Zoom factor section
   const factorZoomSection = node('section', '', `zoom-section ${s.zoomType === 'quick' ? 'dimmed' : ''}`);
   const factorGroup = node('fieldset');
-  factorGroup.append(node('legend', 'Zoom factor'));
+  factorGroup.append(node('legend', i18n.t('controls_zoom_factor')));
   const factorRow = node('div', '', 'segments');
 
   const isFactorActive = Boolean(s.zoomApplied && s.zoomType === 'factor');
@@ -176,15 +177,15 @@ function render() {
   const isFactorManual = Boolean(isFactorActive && s.zoomStrategy === 'manual');
   const isFactorOff = !isFactorAuto && !isFactorManual;
 
-  const factorOff = button('Off', () => patch({ zoomApplied: false }));
+  const factorOff = button(i18n.t('common_off'), () => patch({ zoomApplied: false }));
   factorOff.setAttribute('aria-pressed', String(isFactorOff));
   factorRow.append(factorOff);
 
-  const factorAuto = button('Screen ratio', () => patch({ zoomStrategy: 'automatic', zoomType: 'factor', zoomApplied: true }));
+  const factorAuto = button(i18n.t('common_screen_ratio'), () => patch({ zoomStrategy: 'automatic', zoomType: 'factor', zoomApplied: true }));
   factorAuto.setAttribute('aria-pressed', String(isFactorAuto));
   factorRow.append(factorAuto);
 
-  const factorManual = button('Manual', () => {
+  const factorManual = button(i18n.t('common_manual'), () => {
     const nextZoom = s.zoom > 1.0 ? s.zoom : 1.34;
     patch({ zoomStrategy: 'manual', zoomType: 'factor', zoomApplied: true, zoom: nextZoom });
   });
@@ -199,12 +200,12 @@ function render() {
   if (isFactorAuto) {
     factorZoomSection.append(
       node('p', `Screen-derived factor: ${screenFactor.toFixed(2)}×`, 'hint'),
-      slider('Zoom', 'zoom', .34, 3, .01, true, Number(screenFactor.toFixed(2))),
+      slider(i18n.t('popup_zoom_slider'), 'zoom', .34, 3, .01, true, Number(screenFactor.toFixed(2))),
     );
   } else if (isFactorManual) {
     // Manual presets: 1.18x, 1.25x, 1.34x, 1.5x, 2x (appear ONLY when manual is selected)
     const presetGroup = node('fieldset');
-    presetGroup.append(node('legend', 'Manual presets'));
+    presetGroup.append(node('legend', i18n.t('popup_manual_presets')));
     const presetRow = node('div', '', 'segments');
     for (const v of [1.18, 1.25, 1.34, 1.5, 2]) {
       const item = button(`${v}×`, () => {
@@ -217,7 +218,7 @@ function render() {
       presetRow.append(item);
     }
     presetGroup.append(presetRow);
-    factorZoomSection.append(presetGroup, slider('Zoom', 'zoom', .34, 3));
+    factorZoomSection.append(presetGroup, slider(i18n.t('popup_zoom_slider'), 'zoom', .34, 3));
   }
   mainControls.append(factorZoomSection);
 
@@ -226,13 +227,13 @@ function render() {
   const panActionsRow = node('div', '', 'segments');
   const isPanned = Math.abs(s.panX) > 0.001 || Math.abs(s.panY) > 0.001;
   panActionsRow.append(
-    button('Reset pan', () => run({ type: 'JZ_RESET_PAN' }), !available || !isPanned),
-    button('Reset all', () => run({ type: 'JZ_RESET' }), !available),
+    button(i18n.t('common_reset_pan'), () => run({ type: 'JZ_RESET_PAN' }), !available || !isPanned),
+    button(i18n.t('common_reset_all'), () => run({ type: 'JZ_RESET' }), !available),
   );
-  const gestureTip = node('p', `💡 Hold ${formatModifier(s.gestureModifier ?? 'alt')} + scroll to zoom, drag to pan`, 'hint gesture-tip');
+  const gestureTip = node('p', `💡 ${i18n.t('controls_gesture_tip', [formatModifier(s.gestureModifier ?? 'alt')])}`, 'hint gesture-tip');
   framingSection.append(
-    slider('Pan X', 'panX', -1, 1, .05),
-    slider('Pan Y', 'panY', -1, 1, .05),
+    slider(i18n.t('popup_pan_x'), 'panX', -1, 1, .05),
+    slider(i18n.t('popup_pan_y'), 'panY', -1, 1, .05),
     panActionsRow,
     gestureTip,
   );
@@ -240,53 +241,53 @@ function render() {
 
   // Extras and settings
   const extras = node('section', '', 'extras');
-  extras.append(node('h2', 'Player button'));
-  extras.append(choices('Player controls', [['Both', 'both'], ['Native button', 'native'], ['Floating popup', 'floating']], s.controlMode, value => patch({ controlMode: value as Settings['controlMode'] })));
-  extras.append(node('p', s.controlMode === 'both' ? 'In-player button where supported, plus a floating popup.' : s.controlMode === 'native' ? 'Inserted before fullscreen where the player exposes compatible controls.' : 'Reveals within 200px of the video box’s right-center edge. Opens leftward.', 'hint'));
-  extras.append(check('Animate zoom transitions', 'animations'));
+  extras.append(node('h2', i18n.t('popup_player_button')));
+  extras.append(choices(i18n.t('popup_player_controls'), [[i18n.t('popup_mode_both'), 'both'], [i18n.t('popup_mode_native'), 'native'], [i18n.t('popup_mode_floating'), 'floating']], s.controlMode, value => patch({ controlMode: value as Settings['controlMode'] })));
+  extras.append(node('p', s.controlMode === 'both' ? i18n.t('popup_mode_hint_both') : s.controlMode === 'native' ? i18n.t('popup_mode_hint_native') : i18n.t('popup_mode_hint_floating'), 'hint'));
+  extras.append(check(i18n.t('popup_animate_zoom'), 'animations'));
   if (snapshot.adapter === 'Netflix' || /(^|\.)netflix\.com$/.test(snapshot.hostname)) {
-    extras.append(node('p', 'Zoom animations are always disabled on Netflix for stability.', 'hint'));
+    extras.append(node('p', i18n.t('popup_netflix_animation_hint'), 'hint'));
   }
-  extras.append(node('h2', 'Ambience'));
-  const ambience = choices('Ambience', [['Off', 'off'], ['Blur', 'blur'], ['Colour', 'colour']], s.ambience, value => patch({ ambience: value as Settings['ambience'] }));
+  extras.append(node('h2', i18n.t('common_ambience')));
+  const ambience = choices(i18n.t('common_ambience'), [[i18n.t('common_off'), 'off'], [i18n.t('common_blur'), 'blur'], [i18n.t('common_colour'), 'colour']], s.ambience, value => patch({ ambience: value as Settings['ambience'] }));
   ambience.setAttribute('aria-describedby', 'local-pixels');
-  extras.append(ambience, node('p', 'Blur shows a softened video image; Colour follows broad scene colours.', 'hint'));
-  const ambienceRate = choices('Update rate', [
-    ['Default', 'high', 'Update ambience every 75 ms.'],
-    ['Performance', 'performance', 'Update ambience every 150 ms.'],
-    ['Quality', 'quality', 'Update ambience every 40 ms.'],
+  extras.append(ambience, node('p', i18n.t('controls_ambience_hint'), 'hint'));
+  const ambienceRate = choices(i18n.t('controls_update_rate'), [
+    [i18n.t('common_default'), 'high', i18n.t('controls_rate_high_title')],
+    [i18n.t('common_performance'), 'performance', i18n.t('controls_rate_performance_title')],
+    [i18n.t('common_quality'), 'quality', i18n.t('controls_rate_quality_title')],
   ], s.ambienceRate, value => patch({ ambienceRate: value as Settings['ambienceRate'] }));
   if (s.ambience === 'off') {
     ambienceRate.querySelectorAll('button').forEach(item => { item.disabled = true; });
   }
-  extras.append(ambienceRate, node('p', 'Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.', 'hint'));
-  const pixels = node('p', 'Video pixels are processed only on this device. They are not saved or uploaded.', 'hint');
+  extras.append(ambienceRate, node('p', i18n.t('controls_rate_hint'), 'hint'));
+  const pixels = node('p', i18n.t('popup_local_pixels'), 'hint');
   pixels.id = 'local-pixels';
-  extras.append(pixels, check('Allow portrait video / player', 'allowPortrait'));
+  extras.append(pixels, check(i18n.t('popup_allow_portrait'), 'allowPortrait'));
   // Note: Compatibility capture hidden and disabled for now
 
   // Storage section: Save site, Save global, Clear site, Clear all
   const storageSection = node('div', '', 'storage-section');
-  storageSection.append(node('h2', 'Storage'));
-  storageSection.append(check('Remember zoom state per website', 'rememberSiteState'));
+  storageSection.append(node('h2', i18n.t('popup_storage')));
+  storageSection.append(check(i18n.t('popup_remember_site'), 'rememberSiteState'));
   const saves = node('div', '', 'segments');
   saves.append(
-    button('Save site', () => run({ type: 'JZ_SAVE_SITE' }), !available),
-    button('Save global', () => run({ type: 'JZ_SAVE_GLOBAL' })),
+    button(i18n.t('popup_save_site'), () => run({ type: 'JZ_SAVE_SITE' }), !available),
+    button(i18n.t('popup_save_global'), () => run({ type: 'JZ_SAVE_GLOBAL' })),
   );
   const clears = node('div', '', 'segments');
   clears.style.marginTop = '4px';
   clears.append(
-    button('Clear site', () => run({ type: 'JZ_CLEAR_SITE' }), !available),
-    button('Clear all', () => run({ type: 'JZ_CLEAR_ALL' })),
+    button(i18n.t('popup_clear_site'), () => run({ type: 'JZ_CLEAR_SITE' }), !available),
+    button(i18n.t('popup_clear_all'), () => run({ type: 'JZ_CLEAR_ALL' })),
   );
   storageSection.append(
     saves,
     clears,
-    node('p', available ? 'Site preferences override global defaults. Clear site removes site preferences; Clear all resets all saved preferences.' : 'Changes save automatically as global defaults.', 'hint'),
+    node('p', available ? i18n.t('popup_storage_hint_active') : i18n.t('popup_storage_hint_global'), 'hint'),
   );
   extras.append(storageSection);
-  extras.append(button('Keyboard shortcuts & player lab', () => { void chrome.runtime.openOptionsPage(); }));
+  extras.append(button(i18n.t('popup_open_shortcuts'), () => { void chrome.runtime.openOptionsPage(); }));
   mainControls.append(extras);
 
   if (!s.enabled) {
