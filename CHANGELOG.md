@@ -2,6 +2,21 @@
 
 All notable changes to **just_zoom** are documented in this file.
 
+## [0.7.0] - 2026-09-30
+
+### Added
+- **Full Internationalization (i18n)**:
+  - Added complete localization across 18 languages: English (`en`), German (`de`), Japanese (`ja`), Spanish (`es`), French (`fr`), Portuguese (Brazil) (`pt_BR`), Simplified Chinese (`zh_CN`), Traditional Chinese (`zh_TW`), Korean (`ko`), Italian (`it`), Russian (`ru`), Polish (`pl`), Dutch (`nl`), Turkish (`tr`), Ukrainian (`uk`), Vietnamese (`vi`), Indonesian (`id`), and Czech (`cs`).
+  - 100% key parity (294 keys per locale) covering all extension interfaces: in-player toolbar buttons, quick controls menu, floating popups, on-screen display (HUD) feedback, browser action popup, keyboard shortcut recorder, player test lab, and extension settings.
+- **Dedicated Language Tab**:
+  - Added a dedicated "Language" tab to the extension options page to allow manual language selection with instant UI updates or automatic fallback to browser default.
+- **Dynamic Runtime Translation**:
+  - Implemented client-side dictionary loading and reactive translation listeners so language changes apply immediately across all open player instances and popups without needing a reload.
+
+### Fixed
+- **Chromium Variable Syntax Compliance**: Resolved message placeholder collisions (`$1×` / `$2×`) ensuring strict compatibility with Chromium, Firefox, and Safari manifest/locale parsers.
+- **Settings Language Validation**: Updated settings normalization and storage synchronization to securely validate all 18 supported languages.
+
 ## [0.6.5] - 2026-09-30
 
 ### Changed
