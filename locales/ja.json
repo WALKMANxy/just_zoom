@@ -39,7 +39,7 @@
   "hud_ambience_off": "アンビエンス オフ",
   "hud_ambience_blur": "アンビエンス ぼかし",
   "hud_ambience_colour": "アンビエンス カラー",
-  "hud_screen_profile": "画面: $1x$2 ($3x)",
+  "hud_screen_profile": "画面: $1 × $2 ($3×)",
   "hud_display_profile": "$1 ディスプレイ ($2x)",
   "controls_toggle_zoom": "ズーム切り替え",
   "controls_reset_zoom": "ズームリセット",

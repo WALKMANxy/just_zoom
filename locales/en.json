@@ -39,7 +39,7 @@
   "hud_ambience_off": "Ambience Off",
   "hud_ambience_blur": "Ambience Blur",
   "hud_ambience_colour": "Ambience Colour",
-  "hud_screen_profile": "Screen: $1x$2 ($3x)",
+  "hud_screen_profile": "Screen: $1 × $2 ($3×)",
   "hud_display_profile": "$1 Display ($2x)",
   "controls_toggle_zoom": "Toggle Zoom",
   "controls_reset_zoom": "Reset Zoom",

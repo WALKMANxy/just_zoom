@@ -39,7 +39,7 @@
   "hud_ambience_off": "Ambience Aus",
   "hud_ambience_blur": "Ambience Weichzeichner",
   "hud_ambience_colour": "Ambience Farbe",
-  "hud_screen_profile": "Bildschirm: $1x$2 ($3x)",
+  "hud_screen_profile": "Bildschirm: $1 × $2 ($3×)",
   "hud_display_profile": "$1-Display ($2x)",
   "controls_toggle_zoom": "Zoom umschalten",
   "controls_reset_zoom": "Zoom zurücksetzen",
