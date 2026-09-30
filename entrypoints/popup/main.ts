@@ -2,7 +2,7 @@ import { DEFAULT_SETTINGS, type RuntimeSnapshot, type Settings } from '../../src
 import { formatModifier } from '../../src/shared/shortcuts';
 import './style.css';
 import { AUTO_CROP_AVAILABLE } from '../../src/shared/features';
-import { i18n } from '#i18n';
+import { i18n, setLanguage } from '../../src/shared/i18n';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 let snapshot: RuntimeSnapshot = { available: false, hostname: '', adapter: '', settings: DEFAULT_SETTINGS, status: { source: 'idle', message: 'Loading…' } };
@@ -125,6 +125,7 @@ function check(label: string, key: 'enabled' | 'animations' | 'buttonUseLast' | 
 }
 
 function render() {
+  if (snapshot.settings?.language) setLanguage(snapshot.settings.language);
   const { settings: s, available } = snapshot;
   app.replaceChildren(node('h1', 'just_zoom'));
   const hostLabel = snapshot.hostname

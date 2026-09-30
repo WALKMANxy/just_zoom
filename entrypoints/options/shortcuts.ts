@@ -1,4 +1,4 @@
-import { i18n } from '#i18n';
+import { i18n } from '../../src/shared/i18n';
 import { DEFAULT_SHORTCUTS, SHORTCUT_ACTIONS, SHORTCUT_LABELS, formatShortcut, isMac, loadShortcuts, normalizeShortcuts, saveShortcuts, shortcutFromEvent, subscribeShortcuts, validateShortcuts, type ShortcutMap } from '../../src/shared/shortcuts';
 import type { ZoomAction } from '../../src/shared/types';
 

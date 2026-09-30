@@ -267,5 +267,11 @@
   "options_info_generic_desc": "For generic player frameworks (such as Video.js, Plyr, JW Player, Shaka) and streaming sites without dedicated adapters, just_zoom automatically provides the non-intrusive floating popup button. This ensures zoom and framing controls are always readily accessible without risking layout collisions or breaking custom player toolbars.",
   "options_info_ambience_heading": "Ambience Lighting",
   "options_info_ambience_desc": "Ambience currently works on non-DRM protected videos (such as YouTube and standard HTML5 video). Hardware DRM on platforms like Netflix, Disney+, and Prime Video prevents direct frame sampling, so Ambience remains inactive on those streams.",
-  "options_info_feedback_heading": "Feedback & Bug Reports"
+  "options_info_feedback_heading": "Feedback & Bug Reports",
+  "options_language_label": "Interface language",
+  "options_language_hint": "Choose your preferred language for controls, popup, and settings.",
+  "options_language_auto": "Auto (Browser default)",
+  "options_language_en": "English",
+  "options_language_de": "Deutsch (German)",
+  "options_language_ja": "日本語 (Japanese)"
 }

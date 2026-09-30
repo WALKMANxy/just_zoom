@@ -267,5 +267,11 @@
   "options_info_generic_desc": "汎用プレーヤーフレームワーク（Video.js、Plyr、JW Player、Shaka など）や専用アダプターのない配信サイトでは、目立たないフローティングボタンが自動的に表示されます。プレーヤーのレイアウトやカスタム操作バーを崩すことなく、いつでもズームと構図の調整を行えます。",
   "options_info_ambience_heading": "アンビエンス照明（環境光効果）",
   "options_info_ambience_desc": "アンビエンス機能は現在、DRM保護されていない動画（YouTubeや標準HTML5動画など）で動作します。Netflix、Disney+、Prime Video などのハードウェアDRMではフレームの直接取得が制限されるため、アンビエンスは自動的に無効になります。",
-  "options_info_feedback_heading": "フィードバックと不具合の報告"
+  "options_info_feedback_heading": "フィードバックと不具合の報告",
+  "options_language_label": "表示言語",
+  "options_language_hint": "操作パネル、ポップアップ、設定画面の表示言語を選択します。",
+  "options_language_auto": "自動（ブラウザのデフォルト）",
+  "options_language_en": "English（英語）",
+  "options_language_de": "Deutsch（ドイツ語）",
+  "options_language_ja": "日本語"
 }

@@ -1,4 +1,4 @@
-import { i18n } from '#i18n';
+import { i18n } from '../../src/shared/i18n';
 
 export function hydrateOptionsI18n(): void {
   document.title = i18n.t('options_title');

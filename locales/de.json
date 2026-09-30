@@ -267,5 +267,11 @@
   "options_info_generic_desc": "Für generische Player-Frameworks (wie Video.js, Plyr, JW Player, Shaka) und Streaming-Websites ohne dedizierten Adapter stellt just_zoom automatisch eine schwebende Schaltfläche bereit. So bleiben Zoom- und Bildausschnitt-Steuerelemente immer zugänglich, ohne das Layout oder Steuerelemente des Players zu beeinträchtigen.",
   "options_info_ambience_heading": "Ambience-Beleuchtung",
   "options_info_ambience_desc": "Ambience funktioniert derzeit bei Videos ohne DRM-Kopierschutz (wie YouTube und Standard-HTML5-Videos). Hardware-DRM auf Plattformen wie Netflix, Disney+, und Prime Video verhindert das direkte Auslesen von Videobildern, daher bleibt Ambience bei diesen Streams inaktiv.",
-  "options_info_feedback_heading": "Feedback & Fehlerberichte"
+  "options_info_feedback_heading": "Feedback & Fehlerberichte",
+  "options_language_label": "Sprache der Benutzeroberfläche",
+  "options_language_hint": "Wählen Sie Ihre bevorzugte Sprache für Bedienelemente, Popup und Einstellungen.",
+  "options_language_auto": "Automatisch (Browser-Standard)",
+  "options_language_en": "English (Englisch)",
+  "options_language_de": "Deutsch",
+  "options_language_ja": "日本語 (Japanisch)"
 }

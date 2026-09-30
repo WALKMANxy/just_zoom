@@ -10,7 +10,7 @@ import { automaticZoomFactor, getDisplayAspectBucket, portraitBlocked } from './
 import { attachShortcuts } from '../shared/shortcuts';
 import { attachGestures, type GesturesController } from './gestures';
 import { createHud, type HudController } from '../ui/hud';
-import { i18n } from '#i18n';
+import { i18n, setLanguage } from '../shared/i18n';
 
 export function startRuntime(): () => void {
   const hostname = location.hostname;
@@ -28,6 +28,14 @@ export function startRuntime(): () => void {
   let ready = false;
   let readyPromise: Promise<void> | null = null;
   let settingsRevision = 0;
+
+  function applyRuntimeSettings(next: Settings) {
+    settings = next;
+    if (settings.language) {
+      setLanguage(settings.language);
+      controls?.update(settings, status);
+    }
+  }
   let localEditRevision = 0;
   let localSettingsDirty = false;
   let siteSaveTimer = 0;
@@ -54,7 +62,7 @@ export function startRuntime(): () => void {
       if (bucketChanged && settings.rememberSiteState) {
         void loadSettings(hostname, bucket).then(next => {
           if (!disposed && isContextValid() && isActive) {
-            settings = next;
+            applyRuntimeSettings(next);
             transform?.refresh();
             update();
             if (settings.hudEnabled) {
@@ -158,7 +166,7 @@ export function startRuntime(): () => void {
     if (change.panX !== undefined || change.panY !== undefined) change = { ...change, autoCrop: false, zoomApplied: true };
     if (change.autoCrop === true) change = { ...change, zoomApplied: true };
     const willToggle = change.zoomApplied !== undefined && change.zoomApplied !== settings.zoomApplied;
-    settings = normalizeSettings(change, settings); update(willToggle, immediate);
+    applyRuntimeSettings(normalizeSettings(change, settings)); update(willToggle, immediate);
     if (change.mode === 'fit' && (change.zoomApplied ?? settings.zoomApplied)) showHud(i18n.t('hud_fit'), 'mode');
     else if (change.mode === 'fill' && (change.zoomApplied ?? settings.zoomApplied)) showHud(i18n.t('hud_fill'), 'mode');
     if (change.enabled !== undefined) { void save('global'); }
@@ -170,7 +178,7 @@ export function startRuntime(): () => void {
     }
   };
   const reset = () => {
-    settings = normalizeSettings({ mode: 'fit', zoomApplied: false, panX: 0, panY: 0, autoCrop: false }, settings);
+    applyRuntimeSettings(normalizeSettings({ mode: 'fit', zoomApplied: false, panX: 0, panY: 0, autoCrop: false }, settings));
     crop = { ...EMPTY_CROP }; effects?.reset(); update();
     showHud(i18n.t('hud_framing_reset'), 'reset');
     if (settings.rememberSiteState) {
@@ -362,13 +370,13 @@ export function startRuntime(): () => void {
     unsubscribe = subscribeSettings(hostname, next => {
       settingsRevision++;
       if (localSettingsDirty) return;
-      settings = next;
+      applyRuntimeSettings(next);
       if (ready) update();
     }, currentBucket);
     const initialRevision = settingsRevision;
     readyPromise = loadSettings(hostname, currentBucket()).then(next => {
       if (!disposed && isContextValid() && isActive) {
-        if (settingsRevision === initialRevision) settings = next;
+        if (settingsRevision === initialRevision) applyRuntimeSettings(next);
         ready = true;
         discover();
       }
@@ -606,7 +614,7 @@ export function startRuntime(): () => void {
       else if (msg.type === 'JZ_SAVE_GLOBAL') { await save('global'); respond(snapshot()); }
       else if (msg.type === 'JZ_CLEAR_SITE') {
         await eraseSettings('site', hostname, currentBucket());
-        settings = await loadSettings(hostname, currentBucket());
+        applyRuntimeSettings(await loadSettings(hostname, currentBucket()));
         crop = { ...EMPTY_CROP };
         effects?.reset();
         update();
@@ -614,7 +622,7 @@ export function startRuntime(): () => void {
       }
       else if (msg.type === 'JZ_CLEAR_ALL') {
         await eraseSettings('all');
-        settings = await loadSettings(hostname, currentBucket());
+        applyRuntimeSettings(await loadSettings(hostname, currentBucket()));
         crop = { ...EMPTY_CROP };
         effects?.reset();
         update();

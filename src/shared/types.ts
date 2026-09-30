@@ -4,6 +4,7 @@ export type ZoomType = 'quick' | 'factor';
 export type VideoFinderMode = 'treewalker' | 'bruteforce';
 export type GestureModifier = 'alt' | 'ctrl' | 'shift' | 'meta';
 export type DisplayProfile = 'auto' | '16:9' | '16:10' | '21:9' | '32:9' | 'custom';
+export type Language = 'auto' | 'en' | 'de' | 'ja';
 export interface Settings {
   enabled: boolean;
   controlMode: 'native' | 'floating' | 'both';
@@ -31,6 +32,7 @@ export interface Settings {
   displayProfile: DisplayProfile;
   customDisplayAspectRatio: number;
   nativeHtml5Workaround: boolean;
+  language: Language;
 }
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true, animations: true, controlMode: 'both', buttonAction: 'zoom-in', buttonUseLast: true, buttonFactor: 1.34,
@@ -45,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   displayProfile: 'auto',
   customDisplayAspectRatio: 2.39,
   nativeHtml5Workaround: true,
+  language: 'auto',
 };
 export interface PlayerBinding {
   video: HTMLVideoElement;

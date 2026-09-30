@@ -2,10 +2,10 @@ import './style.css';
 import { startRuntime } from '../../src/core/runtime';
 import { setupShortcutSettings } from './shortcuts';
 import { eraseSettings, loadFullStore, normalizeSettings, saveGlobalSettings } from '../../src/shared/storage';
-import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Settings, type SiteEntry } from '../../src/shared/types';
+import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Language, type Settings, type SiteEntry } from '../../src/shared/types';
 import { automaticZoomFactor } from '../../src/core/eligibility';
 import { isMac } from '../../src/shared/shortcuts';
-import { i18n } from '#i18n';
+import { i18n, setLanguage } from '../../src/shared/i18n';
 import { hydrateOptionsI18n } from './i18n';
 
 hydrateOptionsI18n();
@@ -45,6 +45,7 @@ tabButtons.forEach(btn => {
 // ----------------------------------------------------------------------------
 const masterToggleBtn = document.querySelector<HTMLButtonElement>('#setting-master-toggle')!;
 const settingsGrid = document.querySelector<HTMLElement>('#settings-grid')!;
+const languageSelect = document.querySelector<HTMLSelectElement>('#setting-language')!;
 const controlModeSelect = document.querySelector<HTMLSelectElement>('#setting-controlMode')!;
 const buttonActionSelect = document.querySelector<HTMLSelectElement>('#setting-buttonAction')!;
 const rememberSiteStateCheckbox = document.querySelector<HTMLInputElement>('#setting-rememberSiteState')!;
@@ -195,6 +196,7 @@ masterToggleBtn.addEventListener('click', async () => {
 
 function applySettingsToForm(settings: Settings) {
   updateMasterToggleUI(settings.enabled);
+  languageSelect.value = settings.language || 'auto';
   controlModeSelect.value = settings.controlMode;
   buttonActionSelect.value = settings.buttonAction === 'zoom-out' ? 'zoom-out' : 'zoom-in';
   rememberSiteStateCheckbox.checked = settings.rememberSiteState;
@@ -220,6 +222,7 @@ function readSettingsFromForm(): Settings {
   return {
     ...currentGlobal,
     enabled: currentGlobal.enabled,
+    language: (languageSelect.value as Language) || 'auto',
     controlMode: controlModeSelect.value as 'both' | 'native' | 'floating',
     buttonAction: buttonActionSelect.value as 'zoom-in' | 'zoom-out',
     rememberSiteState: rememberSiteStateCheckbox.checked,
@@ -240,10 +243,27 @@ function readSettingsFromForm(): Settings {
   };
 }
 
+languageSelect.addEventListener('change', async () => {
+  const nextLang = (languageSelect.value as Language) || 'auto';
+  currentGlobal.language = nextLang;
+  setLanguage(nextLang);
+  hydrateOptionsI18n();
+  updateMasterToggleUI(currentGlobal.enabled);
+  updateDisplayProfileUI();
+  void renderSavedSites();
+  try {
+    await saveGlobalSettings(currentGlobal);
+  } catch (err) {
+    console.error('Failed to save language setting:', err);
+  }
+});
+
 async function loadGlobalSettings() {
   try {
     const store = await loadFullStore();
     currentGlobal = store.global;
+    setLanguage(currentGlobal.language || 'auto');
+    hydrateOptionsI18n();
     applySettingsToForm(currentGlobal);
   } catch (error) {
     console.error('Failed to load settings:', error);
@@ -266,6 +286,8 @@ settingsSaveBtn.addEventListener('click', async () => {
 });
 
 settingsResetBtn.addEventListener('click', async () => {
+  setLanguage(DEFAULT_SETTINGS.language);
+  hydrateOptionsI18n();
   applySettingsToForm(DEFAULT_SETTINGS);
   currentGlobal = { ...DEFAULT_SETTINGS };
   settingsResetBtn.disabled = true;

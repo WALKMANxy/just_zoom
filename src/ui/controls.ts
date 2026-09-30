@@ -9,7 +9,7 @@ import { isContextValid } from '../shared/storage';
 import { portraitBlocked } from '../core/eligibility';
 import { createDisneyPointerExclusion } from '../core/adapters';
 import { formatModifier } from '../shared/shortcuts';
-import { i18n } from '#i18n';
+import { i18n } from '../shared/i18n';
 
 const EVENT_TYPES = [
   'pointerdown',

@@ -1,5 +1,5 @@
 import type { ControlsHandlers, PlayerBinding, Settings } from '../shared/types';
-import { i18n } from '#i18n';
+import { i18n } from '../shared/i18n';
 
 export interface NativePlayerController {
   update(settings: Settings): void;

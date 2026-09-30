@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Settings, type SiteEntry } from './types';
+import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Language, type Settings, type SiteEntry } from './types';
 import { AUTO_CROP_AVAILABLE } from './features';
 
 const KEY = 'justZoomSettings';
@@ -54,6 +54,7 @@ export function normalizeSettings(value: Partial<Settings> | unknown, base: Sett
       : base.displayProfile,
     customDisplayAspectRatio: clamp(v.customDisplayAspectRatio, base.customDisplayAspectRatio, 1, 4),
     nativeHtml5Workaround: typeof v.nativeHtml5Workaround === 'boolean' ? v.nativeHtml5Workaround : base.nativeHtml5Workaround,
+    language: ['auto', 'en', 'de', 'ja'].includes(v.language as string) ? (v.language as Language) : base.language,
   };
 }
 let contextInvalid = false;

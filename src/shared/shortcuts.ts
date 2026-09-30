@@ -1,6 +1,6 @@
 import type { GestureModifier, ZoomAction } from './types';
 import { isContextInvalidationError, isContextValid, markContextInvalid } from './storage';
-import { i18n } from '#i18n';
+import { i18n } from './i18n';
 
 export interface Shortcut { code: string; alt: boolean; ctrl: boolean; shift: boolean; meta: boolean }
 export type ShortcutMap = Record<ZoomAction, Shortcut | null>;
