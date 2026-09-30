@@ -6,9 +6,14 @@ import frMessages from '../../locales/fr.json';
 import ptBrMessages from '../../locales/pt_BR.json';
 import zhCnMessages from '../../locales/zh_CN.json';
 import koMessages from '../../locales/ko.json';
+import itMessages from '../../locales/it.json';
+import ruMessages from '../../locales/ru.json';
+import plMessages from '../../locales/pl.json';
+import nlMessages from '../../locales/nl.json';
+import zhTwMessages from '../../locales/zh_TW.json';
 import type { GeneratedI18nStructure } from '../../.wxt/i18n/structure';
 
-export type Language = 'auto' | 'en' | 'de' | 'ja' | 'es' | 'fr' | 'pt_BR' | 'zh_CN' | 'ko';
+export type Language = 'auto' | 'en' | 'de' | 'ja' | 'es' | 'fr' | 'pt_BR' | 'zh_CN' | 'ko' | 'it' | 'ru' | 'pl' | 'nl' | 'zh_TW';
 
 export const SUPPORTED_LANGUAGES: { value: Language; label: string }[] = [
   { value: 'auto', label: 'Auto (Browser default)' },
@@ -20,6 +25,11 @@ export const SUPPORTED_LANGUAGES: { value: Language; label: string }[] = [
   { value: 'pt_BR', label: 'Português (Brasil)' },
   { value: 'zh_CN', label: '简体中文' },
   { value: 'ko', label: '한국어' },
+  { value: 'it', label: 'Italiano' },
+  { value: 'ru', label: 'Русский' },
+  { value: 'pl', label: 'Polski' },
+  { value: 'nl', label: 'Nederlands' },
+  { value: 'zh_TW', label: '繁體中文' },
 ];
 
 const DICTIONARIES: Record<Exclude<Language, 'auto'>, Record<string, string>> = {
@@ -31,6 +41,11 @@ const DICTIONARIES: Record<Exclude<Language, 'auto'>, Record<string, string>> = 
   pt_BR: ptBrMessages,
   zh_CN: zhCnMessages,
   ko: koMessages,
+  it: itMessages,
+  ru: ruMessages,
+  pl: plMessages,
+  nl: nlMessages,
+  zh_TW: zhTwMessages,
 };
 
 let currentLanguage: Language = 'auto';
