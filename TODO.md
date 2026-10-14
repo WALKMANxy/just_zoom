@@ -5,10 +5,10 @@ This document tracks future features and planned enhancements for **just_zoom**,
 ---
 
 ## 1. Internationalization & Localization (i18n)
-- [ ] **Extension i18n Architecture**:
+- [x] **Extension i18n Architecture** (shipped in 0.7.0):
   - Implement Chrome extension localization infrastructure using standard `_locales/` message bundles (`messages.json`).
   - Configure `default_locale: "en"` in extension manifest.
-- [ ] **UI String Extraction**:
+- [x] **UI String Extraction** (shipped in 0.7.0; 18 locales):
   - Replace hardcoded text in options page, toolbar popup, Action HUD, and in-player shadow DOM controls with `chrome.i18n.getMessage(...)`.
   - Maintain symbolic consistency for AV terms, ratios (`21:9`, `32:9`), and multipliers (`1.34×`).
 - [ ] **Targeted Language Releases**:

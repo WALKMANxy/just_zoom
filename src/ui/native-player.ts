@@ -660,6 +660,7 @@ const ICONS = {
   fsExit: '<svg viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" fill="currentColor"/></svg>',
   speed: '<svg viewBox="0 0 24 24"><path d="M20.38 8.57l-1.23 1.85a8 8 0 0 1-.22 7.58H5.07A8 8 0 0 1 15.58 6.85l1.85-1.23A10 10 0 0 0 3.35 19a2 2 0 0 0 1.72 1h13.85a2 2 0 0 0 1.74-1 10 10 0 0 0-.28-10.43zM10.59 15.41a2 2 0 1 1 2.83-2.83l2.83-2.83 1.41 1.41-2.83 2.83a2 2 0 0 1-4.24 1.42z" fill="currentColor"/></svg>',
   pip: '<svg viewBox="0 0 24 24"><path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z" fill="currentColor"/></svg>',
+  captions: '<svg viewBox="0 0 24 24"><path d="M19 4H5c-1.11 0-2 .9-2 2v12c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 7H9.5v-.5h-2v3h2V13H11v1c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1zm7 0h-1.5v-.5h-2v3h2V13H18v1c0 .55-.45 1-1 1h-3c-.55 0-1-.45-1-1v-4c0-.55.45-1 1-1h3c.55 0 1 .45 1 1v1z" fill="currentColor"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/></svg>',
 };
 
@@ -786,16 +787,18 @@ export function createNativePlayer(
   const wrapper = createPlayerWrapper(video);
   binding.viewport = wrapper;
 
-  // Intercept video.requestFullscreen so external or browser triggers target wrapper
+  // Route this world's video.requestFullscreen calls to the wrapper. Content scripts run in
+  // an isolated world, so page scripts keep their own view of the method; teardown
+  // still restores the exact own-property state seen here.
+  const ownRequestFs = Object.getOwnPropertyDescriptor(video, 'requestFullscreen');
   const origRequestFs = video.requestFullscreen?.bind(video);
-  if (origRequestFs) {
-    video.requestFullscreen = async function (options?: FullscreenOptions) {
-      if (wrapper.isConnected) {
-        return wrapper.requestFullscreen(options);
-      }
-      return origRequestFs(options);
-    };
-  }
+  const requestFsOverride = origRequestFs ? async function (options?: FullscreenOptions) {
+    if (wrapper.isConnected) {
+      return wrapper.requestFullscreen(options);
+    }
+    return origRequestFs(options);
+  } : null;
+  if (requestFsOverride) video.requestFullscreen = requestFsOverride;
 
   const host = document.createElement('div');
   host.className = 'jz-controls-host jz-native-controls-host';
@@ -941,6 +944,7 @@ export function createNativePlayer(
   speedItem.addEventListener('click', (e) => {
     e.stopPropagation();
     speedList.hidden = !speedList.hidden;
+    if (!speedList.hidden) captionsList.hidden = true;
   });
 
   // 2. Picture in Picture item
@@ -972,12 +976,71 @@ export function createNativePlayer(
     }
   });
 
+  // 4. Captions: the workaround turns native controls off, which also removes the
+  // browser's track menu, so expose the video's own subtitle/caption tracks here.
+  const captionsItem = document.createElement('div');
+  captionsItem.className = 'jz-menu-item jz-captions-item';
+  captionsItem.setAttribute('role', 'button');
+  captionsItem.tabIndex = 0;
+  captionsItem.setAttribute('aria-haspopup', 'true');
+  captionsItem.innerHTML = `<div class="jz-item-left"><span class="jz-item-icon">${ICONS.captions}</span><span>${i18n.t('player_captions')}</span></div><span class="jz-menu-val jz-captions-val"></span>`;
+  const captionsList = document.createElement('div');
+  captionsList.className = 'jz-speed-list jz-captions-list';
+  captionsList.setAttribute('role', 'menu');
+  captionsList.hidden = true;
+
+  const captionTracks = () => Array.from(video.textTracks)
+    .filter(track => track.kind === 'subtitles' || track.kind === 'captions');
+  const selectCaption = (selected: TextTrack | null) => {
+    for (const track of captionTracks()) track.mode = track === selected ? 'showing' : 'disabled';
+    captionsList.hidden = true;
+    menu.hidden = true;
+  };
+  const syncCaptions = () => {
+    const tracks = captionTracks();
+    captionsItem.style.display = tracks.length ? 'flex' : 'none';
+    if (!tracks.length) { captionsList.hidden = true; return; }
+    const showing = tracks.find(track => track.mode === 'showing') ?? null;
+    const label = (track: TextTrack, index: number) => track.label || track.language || `${i18n.t('player_captions')} ${index + 1}`;
+    const valEl = captionsItem.querySelector('.jz-captions-val');
+    if (valEl) valEl.textContent = showing ? label(showing, tracks.indexOf(showing)) : i18n.t('common_off');
+    captionsItem.setAttribute('aria-expanded', String(!captionsList.hidden));
+    const options = [null, ...tracks].map((track, index) => {
+      const opt = document.createElement('div');
+      const selected = track === showing;
+      opt.className = `jz-speed-opt ${selected ? 'is-selected' : ''}`;
+      opt.setAttribute('role', 'menuitemradio');
+      opt.setAttribute('aria-checked', String(selected));
+      opt.tabIndex = 0;
+      opt.textContent = track ? label(track, index - 1) : i18n.t('common_off');
+      const choose = (e: Event) => { e.stopPropagation(); e.preventDefault(); selectCaption(track); };
+      opt.addEventListener('click', choose);
+      opt.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') choose(e); });
+      return opt;
+    });
+    captionsList.replaceChildren(...options);
+  };
+  const toggleCaptionsList = (e: Event) => {
+    e.stopPropagation();
+    captionsList.hidden = !captionsList.hidden;
+    if (!captionsList.hidden) speedList.hidden = true;
+    syncCaptions();
+  };
+  captionsItem.addEventListener('click', toggleCaptionsList);
+  captionsItem.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCaptionsList(e); }
+  });
+  video.textTracks.addEventListener('addtrack', syncCaptions);
+  video.textTracks.addEventListener('removetrack', syncCaptions);
+  video.textTracks.addEventListener('change', syncCaptions);
+
   const syncMenuOptions = () => {
     const dl = getDownloadUrl(video);
     downloadItem.style.display = dl ? 'flex' : 'none';
+    syncCaptions();
   };
 
-  menu.append(speedItem, speedList, pipItem, downloadItem);
+  menu.append(speedItem, speedList, captionsItem, captionsList, pipItem, downloadItem);
   optionsGroup.append(optionsBtn, menu);
 
   // Fullscreen button
@@ -1101,6 +1164,7 @@ export function createNativePlayer(
     volLevel.style.height = `${pct}%`;
     volThumb.style.bottom = `${pct}%`;
     volTrack.setAttribute('aria-valuenow', `${pct}`);
+    volBtn.setAttribute('aria-label', video.muted ? i18n.t('player_unmute') : i18n.t('player_mute'));
 
     if (video.muted || effectiveVol === 0) {
       volBtn.innerHTML = ICONS.volMuted;
@@ -1196,6 +1260,7 @@ export function createNativePlayer(
     menu.hidden = !menu.hidden;
     if (!menu.hidden) {
       speedList.hidden = true;
+      captionsList.hidden = true;
       syncMenuOptions();
     }
   });
@@ -1206,6 +1271,7 @@ export function createNativePlayer(
     if (!path.includes(optionsGroup)) {
       menu.hidden = true;
       speedList.hidden = true;
+      captionsList.hidden = true;
     }
   };
   window.addEventListener('pointerdown', onWindowPointerDown);
@@ -1322,6 +1388,30 @@ export function createNativePlayer(
   video.addEventListener('volumechange', updateVolUI);
   document.addEventListener('fullscreenchange', onFullscreenChange);
 
+  // Construction-time labels must follow a live language change too.
+  const setItemLabel = (item: HTMLElement, text: string) => {
+    const label = item.querySelector('.jz-item-left > span:last-child');
+    if (label) label.textContent = text;
+  };
+  const relabel = () => {
+    volTrack.setAttribute('aria-label', i18n.t('player_volume'));
+    zoomBtn.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
+    zoomBtn.title = i18n.t('player_zoom_btn_title');
+    optionsBtn.setAttribute('aria-label', i18n.t('player_options'));
+    optionsBtn.title = i18n.t('player_options');
+    fsBtn.setAttribute('aria-label', i18n.t('player_fullscreen'));
+    setItemLabel(speedItem, i18n.t('player_speed'));
+    setItemLabel(pipItem, i18n.t('player_pip'));
+    setItemLabel(downloadItem, i18n.t('player_download'));
+    setItemLabel(captionsItem, i18n.t('player_captions'));
+    const normalSpeed = speedList.querySelector<HTMLElement>('.jz-speed-opt[data-speed="1"]');
+    if (normalSpeed) normalSpeed.textContent = i18n.t('player_speed_normal');
+    onPlayPause();
+    updateVolUI();
+    syncCaptions();
+  };
+  const unsubscribeLanguage = i18n.subscribeLanguage(relabel);
+
   // Initial sync
   onPlayPause();
   onTimeUpdate();
@@ -1344,6 +1434,7 @@ export function createNativePlayer(
       binding = next;
     },
     dispose() {
+      unsubscribeLanguage();
       clearTimeout(hideTimer);
       clearTimeout(clickTimeout);
       window.removeEventListener('pointermove', onTimelineMove);
@@ -1364,9 +1455,13 @@ export function createNativePlayer(
       video.removeEventListener('durationchange', onTimeUpdate);
       video.removeEventListener('progress', onProgress);
       video.removeEventListener('volumechange', updateVolUI);
+      video.textTracks.removeEventListener('addtrack', syncCaptions);
+      video.textTracks.removeEventListener('removetrack', syncCaptions);
+      video.textTracks.removeEventListener('change', syncCaptions);
 
-      if (origRequestFs) {
-        video.requestFullscreen = origRequestFs;
+      if (requestFsOverride && video.requestFullscreen === requestFsOverride) {
+        if (ownRequestFs) Object.defineProperty(video, 'requestFullscreen', ownRequestFs);
+        else delete (video as Partial<Pick<HTMLVideoElement, 'requestFullscreen'>>).requestFullscreen;
       }
       host.remove();
       unwrapPlayer(video);

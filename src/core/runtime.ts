@@ -1,10 +1,10 @@
 import { DEFAULT_SETTINGS, EMPTY_CROP, type AspectRatioBucket, type Crop, type FeatureStatus, type PlayerBinding, type PlayerControls, type RuntimeSnapshot, type Settings, type ZoomAction } from '../shared/types';
-import { eraseSettings, isContextInvalidationError, isContextValid, loadSettings, markContextInvalid, normalizeSettings, saveGlobalSettings, saveSiteSettings, subscribeSettings } from '../shared/storage';
+import { FRAMING_KEYS, GLOBAL_ONLY_KEYS, SITE_PREFERENCE_KEYS, clearSettings, isContextInvalidationError, isContextValid, isSettingsClearedError, loadSettingsSnapshot, markContextInvalid, normalizeSettings, saveGlobalPatch, saveGlobalSettings, saveSiteSettings, subscribeSettings } from '../shared/storage';
 import { createControls } from '../ui/controls';
 import { createNativePlayer, type NativePlayerController } from '../ui/native-player';
 import { EffectsController } from '../features/effects';
 import { bindPlayer, disneyControlRoots } from './adapters';
-import { isNotExcludedURL, selectVideo } from './discovery';
+import { findShadowVideos, isNotExcludedURL, selectVideo } from './discovery';
 import { TransformEngine } from './transform';
 import { automaticZoomFactor, getDisplayAspectBucket, portraitBlocked } from './eligibility';
 import { attachShortcuts } from '../shared/shortcuts';
@@ -15,7 +15,7 @@ import { i18n, setLanguage } from '../shared/i18n';
 export function startRuntime(): () => void {
   const hostname = location.hostname;
   let settings: Settings = { ...DEFAULT_SETTINGS };
-  let status: FeatureStatus = { source: 'idle', message: 'Select a video to adjust its framing.' };
+  let status: FeatureStatus = { source: 'idle', message: i18n.t('status_select_video') };
   let binding: PlayerBinding | null = null;
   let controls: PlayerControls | null = null;
   let transform: TransformEngine | null = null;
@@ -39,6 +39,19 @@ export function startRuntime(): () => void {
   let localEditRevision = 0;
   let localSettingsDirty = false;
   let siteSaveTimer = 0;
+  let settingsEpoch = 0;
+  let pendingSiteEpoch: number | null = null;
+  let clearInProgress = false;
+  // Site preferences changed on this page since the last successful save. Autosaves
+  // write only these, so untouched preferences keep following the global settings.
+  const editedSiteKeys = new Set<keyof Settings>();
+  const discardPendingSave = () => {
+    clearTimeout(siteSaveTimer); siteSaveTimer = 0;
+    localEditRevision++;
+    localSettingsDirty = false;
+    pendingSiteEpoch = null;
+    editedSiteKeys.clear();
+  };
   let geometryObserver: ResizeObserver | null = null;
   let lastScreenWidth = typeof screen !== 'undefined' ? screen.width : 0;
   let lastScreenHeight = typeof screen !== 'undefined' ? screen.height : 0;
@@ -60,9 +73,11 @@ export function startRuntime(): () => void {
       lastBucket = bucket;
 
       if (bucketChanged && settings.rememberSiteState) {
-        void loadSettings(hostname, bucket).then(next => {
-          if (!disposed && isContextValid() && isActive) {
-            applyRuntimeSettings(next);
+        const revision = settingsRevision;
+        void loadSettingsSnapshot(hostname, bucket).then(next => {
+          if (!disposed && isContextValid() && isActive && revision === settingsRevision && !localSettingsDirty) {
+            settingsEpoch = next.epoch;
+            applyRuntimeSettings(next.settings);
             transform?.refresh();
             update();
             if (settings.hudEnabled) {
@@ -108,7 +123,7 @@ export function startRuntime(): () => void {
       if (!nativePlayer) {
         nativePlayer = createNativePlayer(binding, {
           patch, reset, resetPan, action, activate,
-          saveSite: () => { void save('site'); },
+          saveSite: () => { void save('site', true); },
           saveGlobal: () => { void save('global'); },
         }, settings);
         geometryObserver?.disconnect();
@@ -145,7 +160,7 @@ export function startRuntime(): () => void {
       });
     }
     if (!effects) {
-      status = { source: 'idle', message: 'Manual framing is available.' };
+      status = { source: 'idle', message: i18n.t('status_manual_available') };
       const identity = generation;
       effects = new EffectsController(binding, next => {
         if (disposed || identity !== generation) return;
@@ -159,6 +174,7 @@ export function startRuntime(): () => void {
     transform.update(settings, crop, animateZoom, immediate); effects.update({ ...settings, autoCrop: settings.autoCrop && settings.zoomApplied }); updateControls();
   };
   const patch = (change: Partial<Settings>, immediate = false) => {
+    if (clearInProgress) return;
     // Manual framing holds the last accepted crop; analysis must not fight gestures.
     const manualEdit = change.zoom !== undefined || change.panX !== undefined || change.panY !== undefined;
     if (change.autoCrop === false && !manualEdit) { crop = { ...EMPTY_CROP }; effects?.reset(); }
@@ -169,19 +185,32 @@ export function startRuntime(): () => void {
     applyRuntimeSettings(normalizeSettings(change, settings)); update(willToggle, immediate);
     if (change.mode === 'fit' && (change.zoomApplied ?? settings.zoomApplied)) showHud(i18n.t('hud_fit'), 'mode');
     else if (change.mode === 'fill' && (change.zoomApplied ?? settings.zoomApplied)) showHud(i18n.t('hud_fill'), 'mode');
-    if (change.enabled !== undefined) { void save('global'); }
-    const stateEdit = manualEdit || change.zoomApplied !== undefined || change.zoomStrategy !== undefined || change.zoomType !== undefined || change.mode !== undefined || change.ambience !== undefined || change.ambienceRate !== undefined || change.buttonFactor !== undefined || change.buttonUseLast !== undefined || change.buttonAction !== undefined || change.controlMode !== undefined || change.gesturesEnabled !== undefined || change.gestureModifier !== undefined || change.hudEnabled !== undefined || change.displayProfile !== undefined || change.customDisplayAspectRatio !== undefined;
+    // Global-only preferences (enabled, animations, language, …) never become site overrides.
+    const globalKeys = GLOBAL_ONLY_KEYS.filter(key => change[key] !== undefined);
+    if (globalKeys.length) {
+      const globalPatch: Partial<Settings> = {};
+      for (const key of globalKeys) (globalPatch as Record<string, unknown>)[key] = settings[key];
+      void saveGlobalPatch(globalPatch).catch(() => {
+        status = { ...status, message: i18n.t('status_save_failed') }; updateControls();
+      });
+    }
+    const siteKeys = SITE_PREFERENCE_KEYS.filter(key => change[key] !== undefined);
+    for (const key of siteKeys) editedSiteKeys.add(key);
+    const stateEdit = FRAMING_KEYS.some(key => change[key] !== undefined) || siteKeys.length > 0;
     if (change.rememberSiteState !== undefined || (stateEdit && settings.rememberSiteState)) {
+      pendingSiteEpoch ??= settingsEpoch;
       localEditRevision++; localSettingsDirty = true;
       clearTimeout(siteSaveTimer);
       siteSaveTimer = window.setTimeout(() => { siteSaveTimer = 0; void save('site'); }, 350);
     }
   };
   const reset = () => {
+    if (clearInProgress) return;
     applyRuntimeSettings(normalizeSettings({ mode: 'fit', zoomApplied: false, panX: 0, panY: 0, autoCrop: false }, settings));
     crop = { ...EMPTY_CROP }; effects?.reset(); update();
     showHud(i18n.t('hud_framing_reset'), 'reset');
     if (settings.rememberSiteState) {
+      pendingSiteEpoch ??= settingsEpoch;
       localEditRevision++; localSettingsDirty = true;
       clearTimeout(siteSaveTimer);
       siteSaveTimer = window.setTimeout(() => { siteSaveTimer = 0; void save('site'); }, 350);
@@ -192,6 +221,7 @@ export function startRuntime(): () => void {
     showHud(i18n.t('hud_pan_centered'), 'reset');
   };
   const action = (value: ZoomAction) => {
+    if (clearInProgress) return;
     const currentFactor = settings.autoCrop ? 1 : settings.zoomStrategy === 'manual' ? settings.zoom
       : Object.values(crop).some(edge => edge > .001) ? 1 : automaticZoomFactor(settings.displayProfile, settings.customDisplayAspectRatio);
     switch (value) {
@@ -253,6 +283,7 @@ export function startRuntime(): () => void {
     }
   };
   const activate = () => {
+    if (clearInProgress) return;
     if (settings.zoomApplied) {
       patch({ zoomApplied: false });
       showHud(i18n.t('hud_zoom_off'), 'zoom');
@@ -292,16 +323,52 @@ export function startRuntime(): () => void {
     patch({ zoom: nextZoom, zoomApplied: true, zoomStrategy: 'manual', zoomType: 'factor', autoCrop: false });
     showHud(i18n.t('hud_zoom_level', [nextZoom.toFixed(2)]), 'zoom');
   };
-  const save = async (scope: 'site' | 'global') => {
+  // `snapshot` (explicit Save site) stores every site preference except the remember
+  // opt-out; autosaves store only preferences edited on this page.
+  const save = async (scope: 'site' | 'global', snapshot = false) => {
+    if (clearInProgress) return;
     const revision = localEditRevision, value = settings;
+    const epoch = pendingSiteEpoch ?? settingsEpoch;
+    const siteKeys = snapshot
+      ? [...new Set([...SITE_PREFERENCE_KEYS.filter(key => key !== 'rememberSiteState'), ...editedSiteKeys])]
+      : [...editedSiteKeys];
     if (scope === 'site') { clearTimeout(siteSaveTimer); siteSaveTimer = 0; }
     try {
-      if (scope === 'site') await saveSiteSettings(hostname, value, currentBucket()); else await saveGlobalSettings(value);
-      if (revision === localEditRevision) localSettingsDirty = false;
+      if (scope === 'site') await saveSiteSettings(hostname, value, epoch, currentBucket(), siteKeys); else await saveGlobalSettings(value, epoch);
+      if (revision === localEditRevision) { localSettingsDirty = false; pendingSiteEpoch = null; editedSiteKeys.clear(); }
     }
-    catch {
-      if (revision === localEditRevision) localSettingsDirty = false;
-      status = { ...status, message: 'Could not save preferences. Please try again.' }; updateControls();
+    catch (error) {
+      if (revision !== localEditRevision || disposed) return;
+      if (isSettingsClearedError(error)) {
+        discardPendingSave();
+        const reloadRevision = localEditRevision;
+        try {
+          const next = await loadSettingsSnapshot(hostname, currentBucket());
+          if (disposed || reloadRevision !== localEditRevision) return;
+          settingsEpoch = next.epoch;
+          applyRuntimeSettings(next.settings);
+          crop = { ...EMPTY_CROP }; effects?.reset(); update();
+          return;
+        } catch { /* Report a failed reload through the existing save status below. */ }
+      }
+      localSettingsDirty = false; pendingSiteEpoch = null;
+      status = { ...status, message: i18n.t('status_save_failed') }; updateControls();
+    }
+  };
+  const clear = async (scope: 'site' | 'all') => {
+    if (clearInProgress) throw new Error(i18n.t('status_clear_in_progress'));
+    discardPendingSave();
+    clearInProgress = true;
+    try { await clearSettings(scope, scope === 'site' ? hostname : undefined, scope === 'site' ? currentBucket() : undefined); }
+    finally {
+      try {
+        const next = await loadSettingsSnapshot(hostname, currentBucket());
+        if (!disposed) {
+          settingsEpoch = next.epoch;
+          applyRuntimeSettings(next.settings);
+          crop = { ...EMPTY_CROP }; effects?.reset(); update();
+        }
+      } finally { clearInProgress = false; }
     }
   };
   const sourceChanged = () => { crop = { ...EMPTY_CROP }; effects?.reset(); update(); };
@@ -328,17 +395,48 @@ export function startRuntime(): () => void {
   let unsubscribe: (() => void) | null = null;
   let removeShortcuts: (() => void) | null = null;
 
+  // Custom elements often attach their shadow root or render its <video> after the
+  // insertion record is delivered. Recheck a few such hosts briefly instead of polling.
+  const dormantHosts = new Set<Element>();
+  let dormantRecheck = 0;
+  const cancelDormantRecheck = () => { clearTimeout(dormantRecheck); dormantRecheck = 0; dormantHosts.clear(); };
+  const hostHasVideo = (host: Element) => Boolean(host.querySelector('video')
+    || (host.shadowRoot && (host.shadowRoot.querySelector('video') || findShadowVideos(host.shadowRoot).length))
+    || findShadowVideos(host).length);
+  const scheduleDormantRecheck = (step = 0) => {
+    const delays = [250, 1000, 3000];
+    if (dormantRecheck || step >= delays.length) { if (step >= delays.length) dormantHosts.clear(); return; }
+    dormantRecheck = window.setTimeout(() => {
+      dormantRecheck = 0;
+      if (disposed || isActive || !isContextValid() || !isNotExcludedURL()) { dormantHosts.clear(); return; }
+      for (const host of dormantHosts) {
+        if (!host.isConnected) { dormantHosts.delete(host); continue; }
+        if (hostHasVideo(host)) { cancelDormantRecheck(); wakeUp(); return; }
+      }
+      if (dormantHosts.size) scheduleDormantRecheck(step + 1);
+    }, delays[step]);
+  };
   const armDormant = () => {
     if (disposed || isActive || dormantObserver) return;
     dormantObserver = new MutationObserver(records => {
-      if (!isContextValid() || disposed || isActive) return;
+      if (!isContextValid() || disposed || isActive || !isNotExcludedURL()) return;
+      let pending = false;
       for (const record of records) {
         for (const node of record.addedNodes) {
-          if (node instanceof HTMLVideoElement || (node instanceof Element && (node.querySelector('video') || node.shadowRoot))) {
+          if (node instanceof HTMLVideoElement || (node instanceof Element && (node.querySelector('video') || node.shadowRoot?.querySelector('video')))) {
+            cancelDormantRecheck();
             wakeUp();
             return;
           }
+          if (node instanceof Element && (node.shadowRoot || node.localName.includes('-')) && dormantHosts.size < 32) {
+            dormantHosts.add(node); pending = true;
+          }
         }
+      }
+      if (pending) {
+        // New hosts restart the short sequence; earlier hosts get the same extra chances.
+        clearTimeout(dormantRecheck); dormantRecheck = 0;
+        scheduleDormantRecheck();
       }
     });
     const targetNode = document.body ?? document.documentElement;
@@ -347,10 +445,11 @@ export function startRuntime(): () => void {
 
   const fallAsleep = () => {
     if (disposed || !isActive) return;
+    // Detach while still active so its terminal available:false report reaches the worker.
+    detach();
     isActive = false;
     ready = false;
     readyPromise = null;
-    detach();
     if (poll) { clearInterval(poll); poll = 0; }
     if (reportTimer) { clearInterval(reportTimer); reportTimer = 0; }
     if (scheduled) { clearTimeout(scheduled); scheduled = 0; }
@@ -366,17 +465,32 @@ export function startRuntime(): () => void {
     if (disposed || isActive || !isContextValid()) return;
     isActive = true;
     dormantObserver?.disconnect(); dormantObserver = null;
+    cancelDormantRecheck();
 
-    unsubscribe = subscribeSettings(hostname, next => {
+    unsubscribe = subscribeSettings(hostname, (next, epoch, cleared) => {
       settingsRevision++;
+      if (cleared) discardPendingSave();
       if (localSettingsDirty) return;
+      settingsEpoch = epoch;
+      // A site that does not remember framing keeps this page's live framing when
+      // unrelated storage writes (other tabs, global edits) arrive.
+      if (!cleared && next.rememberSiteState === false) {
+        const live: Partial<Settings> = {};
+        for (const key of FRAMING_KEYS) (live as Record<string, unknown>)[key] = settings[key];
+        next = { ...next, ...live };
+      }
       applyRuntimeSettings(next);
+      if (cleared) { crop = { ...EMPTY_CROP }; effects?.reset(); }
       if (ready) update();
     }, currentBucket);
     const initialRevision = settingsRevision;
-    readyPromise = loadSettings(hostname, currentBucket()).then(next => {
+    readyPromise = loadSettingsSnapshot(hostname, currentBucket()).then(next => {
       if (!disposed && isContextValid() && isActive) {
-        if (settingsRevision === initialRevision) applyRuntimeSettings(next);
+        if (settingsRevision === initialRevision) {
+          discardPendingSave();
+          settingsEpoch = next.epoch;
+          applyRuntimeSettings(next.settings);
+        }
         ready = true;
         discover();
       }
@@ -431,7 +545,8 @@ export function startRuntime(): () => void {
     const video = selectVideo(currentVideo, settings.videoFinderMode);
     if (video === currentVideo) {
       if (!video) {
-        if (!document.querySelector('video')) fallAsleep();
+        // Excluded routes (e.g. feeds with hover previews) sleep even if preview videos remain.
+        if (!isNotExcludedURL() || !document.querySelector('video')) fallAsleep();
         return;
       }
       const fresh = bindPlayer(video, binding!);
@@ -468,8 +583,8 @@ export function startRuntime(): () => void {
     if (video) {
       attach(bindPlayer(video));
     } else {
-      status = { source: 'idle', message: 'No visible video found.' };
-      if (!document.querySelector('video')) fallAsleep();
+      status = { source: 'idle', message: i18n.t('status_no_visible_video') };
+      if (!isNotExcludedURL() || !document.querySelector('video')) fallAsleep();
     }
   };
 
@@ -477,9 +592,9 @@ export function startRuntime(): () => void {
     binding = next;
     next.video.addEventListener('loadedmetadata', sourceChanged);
     next.video.addEventListener('emptied', sourceChanged);
-    status = { source: 'idle', message: 'Manual framing is available.' };
+    status = { source: 'idle', message: i18n.t('status_manual_available') };
     controls = createControls(next, { patch, reset, resetPan, action, activate,
-      saveSite: () => { void save('site'); },
+      saveSite: () => { void save('site', true); },
       saveGlobal: () => { void save('global'); },
     });
     geometryObserver = new ResizeObserver(() => update());
@@ -545,7 +660,7 @@ export function startRuntime(): () => void {
 
   const onPlay = () => {
     if (!isContextValid() || disposed) return;
-    if (!isActive) wakeUp();
+    if (!isActive) { if (isNotExcludedURL()) wakeUp(); }
     else schedule();
   };
 
@@ -610,25 +725,21 @@ export function startRuntime(): () => void {
       else if (msg.type === 'JZ_TOGGLE') { controls?.toggle(); respond(snapshot()); }
       else if (msg.type === 'JZ_ACTION' && msg.action) { action(msg.action); respond(snapshot()); }
       else if (msg.type === 'JZ_ACTIVATE') { activate(); respond(snapshot()); }
-      else if (msg.type === 'JZ_SAVE_SITE') { await save('site'); respond(snapshot()); }
+      else if (msg.type === 'JZ_SAVE_SITE') { await save('site', true); respond(snapshot()); }
       else if (msg.type === 'JZ_SAVE_GLOBAL') { await save('global'); respond(snapshot()); }
       else if (msg.type === 'JZ_CLEAR_SITE') {
-        await eraseSettings('site', hostname, currentBucket());
-        applyRuntimeSettings(await loadSettings(hostname, currentBucket()));
-        crop = { ...EMPTY_CROP };
-        effects?.reset();
-        update();
+        await clear('site');
         respond(snapshot());
       }
       else if (msg.type === 'JZ_CLEAR_ALL') {
-        await eraseSettings('all');
-        applyRuntimeSettings(await loadSettings(hostname, currentBucket()));
-        crop = { ...EMPTY_CROP };
-        effects?.reset();
-        update();
+        await clear('all');
         respond(snapshot());
       }
-    })();
+    })().catch(error => {
+      const message = error instanceof Error ? error.message : 'Could not update preferences. Please try again.';
+      if (!disposed) { status = { ...status, message }; updateControls(); }
+      respond({ error: message });
+    });
     return true;
   };
   chrome.runtime.onMessage.addListener(onMessage);
@@ -661,7 +772,7 @@ export function startRuntime(): () => void {
     clearTimeout(siteSaveTimer); siteSaveTimer = 0;
     if (poll) { clearInterval(poll); poll = 0; }
     if (reportTimer) { clearInterval(reportTimer); reportTimer = 0; }
-    dormantObserver?.disconnect(); dormantObserver = null;
+    dormantObserver?.disconnect(); dormantObserver = null; cancelDormantRecheck();
     activeObserver?.disconnect(); activeObserver = null;
     disneyObserver?.disconnect(); disneyObserver = null; observedDisneyRoots = [];
     document.removeEventListener('fullscreenchange', onFullscreenChange);

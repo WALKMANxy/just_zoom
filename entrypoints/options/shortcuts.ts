@@ -11,6 +11,7 @@ export function setupShortcutSettings(): () => void {
   let saving: Promise<void> = Promise.resolve();
   const rowCleanup: (() => void)[] = [];
   const buttons = new Map<ZoomAction, HTMLButtonElement>();
+  const rowLabels = new Map<ZoomAction, { label: HTMLElement; unbind: HTMLButtonElement }>();
   const announce = (text: string) => { message.textContent = text; };
   const paint = () => {
     for (const action of SHORTCUT_ACTIONS) {
@@ -18,6 +19,13 @@ export function setupShortcutSettings(): () => void {
       button.textContent = recording === action ? i18n.t('shortcut_press_shortcut') : formatShortcut(map[action]);
       button.setAttribute('aria-pressed', String(recording === action));
       button.setAttribute('aria-label', i18n.t('shortcut_aria_rebind', [SHORTCUT_LABELS[action].toLowerCase(), formatShortcut(map[action])]));
+      const row = rowLabels.get(action);
+      if (row) {
+        // Labels are localized; repaint them too so a live language change reaches every row.
+        row.label.textContent = SHORTCUT_LABELS[action];
+        row.unbind.textContent = i18n.t('shortcut_unbind_btn');
+        row.unbind.setAttribute('aria-label', i18n.t('shortcut_aria_unbind', [SHORTCUT_LABELS[action].toLowerCase()]));
+      }
     }
     cancel.hidden = recording === null;
   };
@@ -52,6 +60,7 @@ export function setupShortcutSettings(): () => void {
     unbind.setAttribute('aria-label', i18n.t('shortcut_aria_unbind', [SHORTCUT_LABELS[action].toLowerCase()]));
     const onUnbind = () => commit({ ...map, [action]: null }, i18n.t('shortcut_announced_unbound', [SHORTCUT_LABELS[action]]));
     unbind.addEventListener('click', onUnbind);
+    rowLabels.set(action, { label, unbind });
     rowCleanup.push(() => { record.removeEventListener('click', onRecord); unbind.removeEventListener('click', onUnbind); });
     row.append(label, record, unbind); list.append(row);
   }
@@ -70,11 +79,12 @@ export function setupShortcutSettings(): () => void {
     commit({ ...map, [action]: binding }, i18n.t('shortcut_saved_as', [SHORTCUT_LABELS[action], formatShortcut(binding)]));
   };
   document.addEventListener('keydown', listener, true);
+  const unsubscribeLanguage = i18n.subscribeLanguage(() => { if (active) paint(); });
   const unsubscribe = subscribeShortcuts(next => { revision++; if (pendingWrites === 0) { map = next; if (active) paint(); } });
   const initialRevision = revision;
   void loadShortcuts().then(next => { if (active && revision === initialRevision) { map = next; paint(); } }).catch(() => announce(i18n.t('shortcut_load_failed'))).finally(() => {
     if (!active) return;
     setSaving(pendingWrites > 0);
   });
-  return () => { active = false; unsubscribe(); rowCleanup.forEach(cleanup => cleanup()); document.removeEventListener('keydown', listener, true); cancel.removeEventListener('click', onCancel); reset.removeEventListener('click', onReset); };
+  return () => { active = false; unsubscribe(); unsubscribeLanguage(); rowCleanup.forEach(cleanup => cleanup()); document.removeEventListener('keydown', listener, true); cancel.removeEventListener('click', onCancel); reset.removeEventListener('click', onReset); };
 }

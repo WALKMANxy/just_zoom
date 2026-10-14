@@ -1,9 +1,12 @@
 import { EMPTY_CROP, type Crop, type FeatureStatus, type PlayerBinding, type Settings } from '../shared/types';
 import { isContextInvalidationError, isContextValid, markContextInvalid } from '../shared/storage';
+import { COMPATIBILITY_CAPTURE_AVAILABLE } from '../shared/features';
+import { i18n } from '../shared/i18n';
 
 export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData | null; source: 'direct' | 'compatibility'; detectorSafe: boolean }
 export interface SampleRequest { readPixels?: boolean; width?: number }
 const hasCrop = (crop: Crop) => Object.values(crop).some(value => value > .001);
+const compatibilityEnabled = (settings: Settings) => COMPATIBILITY_CAPTURE_AVAILABLE && settings.compatibility;
 const sameRect = (a: DOMRect, b: DOMRect) => ['x', 'y', 'width', 'height'].every(key => Math.abs(a[key as keyof DOMRect] as number - (b[key as keyof DOMRect] as number)) < 1);
 
 export class FrameSource {
@@ -22,6 +25,8 @@ export class FrameSource {
   private lastProbe = -Infinity;
   constructor(private readonly binding: PlayerBinding, private readonly status: (value: FeatureStatus) => void) {}
   invalidate(): void { this.generation++; }
+  /** Direct pixels failed and no fallback can run; only a source/settings change can help. */
+  isTerminal(settings: Settings): boolean { return this.unreadable && !compatibilityEnabled(settings); }
   reset(): void {
     this.invalidate(); this.unreadable = false; this.lowInformation = 0; this.failureCount = 0; this.retryAt = 0;
     this.canvas.width = 192;
@@ -46,8 +51,8 @@ export class FrameSource {
         let bright = 0;
         for (let i = 0; i < pixels.data.length; i += 16) if (Math.max(pixels.data[i]!, pixels.data[i + 1]!, pixels.data[i + 2]!) > 24) bright++;
         this.lowInformation = bright > pixels.data.length / 16 * .03 ? 0 : this.lowInformation + 1;
-        if (this.lowInformation < 6 || !settings.compatibility) {
-          this.status({ source: 'direct', message: this.lowInformation >= 6 ? 'Dark or unreadable pixels; crop held.' : 'Local video sampling' });
+        if (this.lowInformation < 6 || !compatibilityEnabled(settings)) {
+          this.status({ source: 'direct', message: this.lowInformation >= 6 ? i18n.t('status_dark_pixels') : i18n.t('status_local_sampling') });
           return { canvas: this.canvas, pixels, source: 'direct', detectorSafe: true };
         }
       } catch {
@@ -111,12 +116,12 @@ export class FrameSource {
       this.status({ source: 'unavailable', message: 'Compatibility capture unavailable; manual framing still works.' }); return null;
     }
     */
-    this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+    this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
     return null;
   }
   private sampleVisual(settings: Settings, width: number): Sample | null {
     if (this.unreadable) {
-      this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+      this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
       return null;
     }
     if (!this.visual) {
@@ -143,16 +148,16 @@ export class FrameSource {
         this.lowInformation = bright > 16 * 9 * .03 ? 0 : this.lowInformation + 1;
         this.lastProbe = now;
       }
-      if (this.lowInformation >= 6 && settings.compatibility) {
-        this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+      if (this.lowInformation >= 6 && compatibilityEnabled(settings)) {
+        this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
         return null;
       }
-      this.status({ source: 'direct', message: this.lowInformation >= 6 ? 'Dark or unreadable pixels; crop held.' : 'Local video sampling' });
+      this.status({ source: 'direct', message: this.lowInformation >= 6 ? i18n.t('status_dark_pixels') : i18n.t('status_local_sampling') });
       return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: false };
     } catch {
       this.unreadable = true;
       this.visual.width = width; this.probe.width = 16;
-      this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' });
+      this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
       return null;
     }
   }

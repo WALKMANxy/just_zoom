@@ -106,13 +106,31 @@ export function createDisneyPointerExclusion(host: HTMLElement, activate: () => 
   let mask: Element | null = null;
   let maskObserver: MutationObserver | null = null;
   let disposed = false;
+  // Disney's renderer owns these nodes. Keep only the latest removed path per SVG and
+  // the original inline pointer-events so teardown returns the mask to its own state.
+  const removedPaths = new Map<Node, { path: Element; next: Node | null }>();
+  const svgStyles = new Map<SVGElement, { value: string; priority: string }>();
 
+  const removePath = (path: Element) => {
+    const parent = path.parentNode;
+    if (parent) {
+      // Re-rendered SVGs detach old parents; do not retain them for the session.
+      for (const old of removedPaths.keys()) if (!old.isConnected) removedPaths.delete(old);
+      removedPaths.set(parent, { path, next: path.nextSibling });
+    }
+    path.remove();
+  };
+  const neutralizeSvg = (svg: SVGElement) => {
+    if (!svgStyles.has(svg)) {
+      for (const old of svgStyles.keys()) if (!old.isConnected) svgStyles.delete(old);
+      svgStyles.set(svg, { value: svg.style.getPropertyValue('pointer-events'), priority: svg.style.getPropertyPriority('pointer-events') });
+    }
+    svg.style.setProperty('pointer-events', 'none', 'important');
+  };
   const killMask = () => {
     if (disposed || !mask?.shadowRoot) return;
-    const paths = mask.shadowRoot.querySelectorAll('[data-pointer-mask-path]');
-    for (const p of paths) p.remove();
-    const svgs = mask.shadowRoot.querySelectorAll<SVGElement>('[data-pointer-mask-svg]');
-    for (const s of svgs) s.style.setProperty('pointer-events', 'none', 'important');
+    for (const p of mask.shadowRoot.querySelectorAll('[data-pointer-mask-path]')) removePath(p);
+    for (const s of mask.shadowRoot.querySelectorAll<SVGElement>('[data-pointer-mask-svg]')) neutralizeSvg(s);
   };
 
   const onPointerCapture = (event: MouseEvent | PointerEvent) => {
@@ -144,14 +162,31 @@ export function createDisneyPointerExclusion(host: HTMLElement, activate: () => 
     maskObserver?.disconnect();
     maskObserver = null;
     mask = null;
+    // Reinsert a path only where Disney has not already rendered a replacement.
+    for (const [parent, { path, next }] of removedPaths) {
+      if (!parent.isConnected || path.isConnected) continue;
+      if (parent instanceof Element && parent.querySelector('[data-pointer-mask-path]')) continue;
+      parent.insertBefore(path, next?.parentNode === parent ? next : null);
+    }
+    removedPaths.clear();
+    for (const [svg, original] of svgStyles) {
+      // Leave a value the page has since replaced.
+      if (svg.style.getPropertyValue('pointer-events') !== 'none' || svg.style.getPropertyPriority('pointer-events') !== 'important') continue;
+      if (original.value) svg.style.setProperty('pointer-events', original.value, original.priority);
+      else svg.style.removeProperty('pointer-events');
+    }
+    svgStyles.clear();
   };
 
   return {
     sync() {
       if (disposed) return;
+      // Without a mounted Zoom button there is no hole to protect; never fall
+      // back to neutralizing an unrelated page-wide mask.
+      if (!host.isConnected) { unregister(); return; }
       let scope: Element | null = null;
       const scopeRootSymbol = Symbol.for('ui.ptr.scope.root');
-      for (let node: Node | null = host.isConnected ? host : null; node;
+      for (let node: Node | null = host; node;
         node = node instanceof ShadowRoot ? node.host : node.parentNode) {
         if (node instanceof Element && (node.hasAttribute('data-ui-ptr-scope') || (node as unknown as Record<symbol, unknown>)[scopeRootSymbol])) {
           scope = node;
@@ -170,15 +205,11 @@ export function createDisneyPointerExclusion(host: HTMLElement, activate: () => 
               for (const node of r.addedNodes) {
                 if (node instanceof Element) {
                   if (node.matches('[data-pointer-mask-path]')) {
-                    node.remove();
+                    removePath(node);
                   } else {
-                    for (const p of node.querySelectorAll('[data-pointer-mask-path]')) {
-                      p.remove();
-                    }
+                    for (const p of node.querySelectorAll('[data-pointer-mask-path]')) removePath(p);
                   }
-                  if (node.matches('[data-pointer-mask-svg]')) {
-                    (node as SVGElement).style.setProperty('pointer-events', 'none', 'important');
-                  }
+                  if (node.matches('[data-pointer-mask-svg]')) neutralizeSvg(node as SVGElement);
                 }
               }
             }

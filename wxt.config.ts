@@ -31,6 +31,8 @@ export default defineConfig({
       gecko: {
         id: 'just_zoom@local',
         strict_min_version: '109.0',
+        // Required for new AMO submissions; just_zoom collects no data.
+        data_collection_permissions: { required: ['none'] },
       },
     },
   },

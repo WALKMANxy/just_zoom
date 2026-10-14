@@ -3,11 +3,17 @@ import { AmbienceRenderer } from './ambience';
 import { CropTracker, detectBorders } from './detector';
 import { FrameSource } from './frame-source';
 import { AUTO_CROP_AVAILABLE } from '../shared/features';
+import { i18n } from '../shared/i18n';
 
 const AMBIENCE_INTERVAL: Record<Settings['ambienceRate'], number> = { performance: 150, high: 75, quality: 40 };
+// Settings the effects pipeline reads. Framing (zoom/pan/mode) changes neither the sampled
+// frame nor the backdrop, so it must not restart sampling on every gesture step.
+// If screenshot compatibility capture returns, its detectorSafe check reads framing too.
+const EFFECT_KEYS = ['enabled', 'ambience', 'ambienceRate', 'autoCrop', 'compatibility'] as const;
 
 export class EffectsController {
   private settings: Settings = { ...DEFAULT_SETTINGS };
+  private initialized = false;
   private crop: Crop = { ...EMPTY_CROP };
   private target: Crop = { ...EMPTY_CROP };
   private tracker = new CropTracker();
@@ -31,13 +37,15 @@ export class EffectsController {
     this.observer = new IntersectionObserver(entries => { this.intersection = entries.some(entry => entry.isIntersecting); this.wake(); });
     this.observer.observe(binding.video);
     this.resize = new ResizeObserver(() => this.wake()); this.resize.observe(binding.viewport);
-    for (const event of ['play', 'pause', 'seeked', 'loadeddata', 'emptied']) binding.video.addEventListener(event, this.wake);
+    for (const event of ['play', 'pause', 'seeked']) binding.video.addEventListener(event, this.wake);
+    for (const event of ['loadeddata', 'emptied']) binding.video.addEventListener(event, this.sourceChanged);
     binding.video.addEventListener('seeking', this.seeking);
     document.addEventListener('visibilitychange', this.wake); document.addEventListener('fullscreenchange', this.wake);
   }
   update(settings: Settings): void {
     settings = { ...settings, autoCrop: AUTO_CROP_AVAILABLE && settings.autoCrop };
-    const changed = JSON.stringify(this.settings) !== JSON.stringify(settings);
+    const changed = !this.initialized || EFFECT_KEYS.some(key => this.settings[key] !== settings[key]);
+    this.initialized = true;
     const autoChanged = this.settings.autoCrop !== settings.autoCrop;
     if (this.settings.ambience !== settings.ambience) this.source.reset();
     this.settings = { ...settings };
@@ -49,12 +57,14 @@ export class EffectsController {
   reset(): void { this.source.reset(); this.tracker.reset(); this.crop = { ...EMPTY_CROP }; this.target = { ...EMPTY_CROP }; this.onCrop(this.crop); this.wake(); }
   private report(value: FeatureStatus): void {
     if (this.settings.enabled && this.settings.ambience !== 'off' && !this.ambience.available && value.source !== 'idle') {
-      value = { ...value, message: `${value.message} Ambience needs a separate player container.` };
+      value = { ...value, message: `${value.message} ${i18n.t('status_ambience_container')}` };
     }
     if (this.disposed || value.source === this.statusValue.source && value.message === this.statusValue.message) return;
     this.statusValue = value; this.onStatus(value);
   }
   private seeking = (): void => { this.tracker.clearCandidate(); this.source.invalidate(); this.generation++; this.staticDone = false; };
+  // A new media resource may be readable even if the previous one tainted the canvas.
+  private sourceChanged = (): void => { this.source.reset(); this.wake(); };
   private wake = (): void => {
     if (this.disposed) return;
     this.staticDone = false; this.generation++; this.source.invalidate();
@@ -68,7 +78,7 @@ export class EffectsController {
     if (this.disposed || this.busy) return;
     if (!this.wanted()) {
       this.report(this.settings.enabled && this.settings.ambience !== 'off' && !this.ambience.available
-        ? { source: 'unavailable', message: 'Ambience needs a player container outside video-only fullscreen.' }
+        ? { source: 'unavailable', message: i18n.t('status_ambience_fullscreen') }
         : { source: 'idle', message: '' }); return;
     }
     if (document.hidden || !this.intersection || !this.binding.video.isConnected) return;
@@ -107,10 +117,13 @@ export class EffectsController {
       }
       this.staticDone = video.paused && sample !== null;
     } catch {
-      this.report({ source: 'unavailable', message: 'Advanced effects unavailable; manual framing still works.' });
+      this.report({ source: 'unavailable', message: i18n.t('status_effects_unavailable') });
     } finally {
       this.busy = false;
-      if (!this.disposed && this.wanted() && !document.hidden && this.intersection && !(this.binding.video.paused && this.staticDone)) {
+      // An unreadable source returns null immediately; keep it dormant until wake()
+      // (lifecycle/settings) or a source change gives sampling a reason to retry.
+      if (!this.disposed && this.wanted() && !document.hidden && this.intersection && !(this.binding.video.paused && this.staticDone)
+        && !this.source.isTerminal(this.settings)) {
         this.timer = setTimeout(() => { this.timer = null; void this.tick(); }, this.binding.video.paused ? 1500 : this.settings.ambience !== 'off' ? AMBIENCE_INTERVAL[this.settings.ambienceRate] : 450);
       }
     }
@@ -118,7 +131,8 @@ export class EffectsController {
   dispose(): void {
     this.disposed = true; this.generation++; if (this.timer) clearTimeout(this.timer); this.timer = null;
     this.observer.disconnect(); this.resize.disconnect(); this.source.dispose(); this.ambience.dispose();
-    for (const event of ['play', 'pause', 'seeked', 'loadeddata', 'emptied']) this.binding.video.removeEventListener(event, this.wake);
+    for (const event of ['play', 'pause', 'seeked']) this.binding.video.removeEventListener(event, this.wake);
+    for (const event of ['loadeddata', 'emptied']) this.binding.video.removeEventListener(event, this.sourceChanged);
     this.binding.video.removeEventListener('seeking', this.seeking);
     document.removeEventListener('visibilitychange', this.wake); document.removeEventListener('fullscreenchange', this.wake);
   }

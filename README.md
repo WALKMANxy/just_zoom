@@ -66,7 +66,7 @@ Built with Manifest V3 and WXT. Runs 100% locally in your browser with no accoun
 
 ## Building from Source
 
-Prerequisites: Node.js 18+
+Prerequisites: Node.js 22.12+ (required by the WXT/Vite toolchain)
 
 ```bash
 # Clone repository
@@ -95,4 +95,4 @@ Build artifacts are written to `.output/`.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

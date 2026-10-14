@@ -194,50 +194,39 @@ export function collectVideos(root: Document | ShadowRoot = document): HTMLVideo
   return videos;
 }
 
+function scoreVideo(video: HTMLVideoElement, current?: HTMLVideoElement | null): number {
+  if (!isEligibleVideo(video)) return 0;
+  const rect = video.getBoundingClientRect();
+  const area = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(0, rect.left)) * Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(0, rect.top));
+  if (!area) {
+    return video === current && current.isConnected && (document.hidden || current.mediaKeys || current.readyState >= 1)
+      ? 1000 * (!video.paused ? 3 : 1) : 0;
+  }
+  let score = area * (!video.paused ? 3 : 1) * (video.readyState >= 2 ? 1.3 : 1);
+  if (video === current) score *= 1.15;
+  if (document.fullscreenElement?.contains(video) || document.fullscreenElement === video) score *= 10;
+  return score;
+}
+
 export function selectVideo(current?: HTMLVideoElement | null, finderMode: VideoFinderMode = 'treewalker'): HTMLVideoElement | null {
   if (!isNotExcludedURL()) return null;
 
-  // 1. Fast path: evaluate direct document videos first
-  const docVideos = Array.from(document.querySelectorAll('video'));
   let winner: HTMLVideoElement | null = null;
   let best = 0;
-  for (const video of docVideos) {
-    if (!isEligibleVideo(video)) continue;
-    const rect = video.getBoundingClientRect();
-    const area = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(0, rect.left)) * Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(0, rect.top));
-    if (!area) {
-      if (video === current && current.isConnected && (document.hidden || current.mediaKeys || current.readyState >= 1)) {
-        let score = 1000 * (!video.paused ? 3 : 1);
-        if (score > best) { winner = video; best = score; }
-      }
-      continue;
-    }
-    let score = area * (!video.paused ? 3 : 1) * (video.readyState >= 2 ? 1.3 : 1);
-    if (video === current) score *= 1.15;
-    if (document.fullscreenElement?.contains(video) || document.fullscreenElement === video) score *= 10;
+  const consider = (video: HTMLVideoElement) => {
+    const score = scoreVideo(video, current);
     if (score > best) { winner = video; best = score; }
-  }
-  if (winner) return winner;
+  };
+  for (const video of document.querySelectorAll('video')) consider(video);
 
-  // 2. Only if no document video is eligible, search open shadow roots
-  if (document.body) {
-    const shadowVideos = findShadowVideos(document.body, finderMode);
-    for (const video of shadowVideos) {
-      if (!isEligibleVideo(video)) continue;
-      const rect = video.getBoundingClientRect();
-      const area = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(0, rect.left)) * Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(0, rect.top));
-      if (!area) {
-        if (video === current && current.isConnected && (document.hidden || current.mediaKeys || current.readyState >= 1)) {
-          let score = 1000 * (!video.paused ? 3 : 1);
-          if (score > best) { winner = video; best = score; }
-        }
-        continue;
-      }
-      let score = area * (!video.paused ? 3 : 1) * (video.readyState >= 2 ? 1.3 : 1);
-      if (video === current) score *= 1.15;
-      if (document.fullscreenElement?.contains(video) || document.fullscreenElement === video) score *= 10;
-      if (score > best) { winner = video; best = score; }
-    }
+  // Open shadow roots need a full tree walk, so skip it only when a playing
+  // document video already dominates the viewport. Otherwise a light-DOM preview
+  // could displace a larger (or the currently bound) shadow-DOM player.
+  const lightWinner = winner as HTMLVideoElement | null;
+  const dominant = lightWinner !== null && !lightWinner.paused && best >= innerWidth * innerHeight * 0.25 * 3;
+  const currentInShadow = current?.isConnected && current.getRootNode() instanceof ShadowRoot;
+  if (document.body && (!dominant || currentInShadow)) {
+    for (const video of findShadowVideos(document.body, finderMode)) consider(video);
   }
   return winner;
 }

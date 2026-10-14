@@ -1,7 +1,7 @@
 import './style.css';
 import { startRuntime } from '../../src/core/runtime';
 import { setupShortcutSettings } from './shortcuts';
-import { eraseSettings, loadFullStore, normalizeSettings, saveGlobalSettings } from '../../src/shared/storage';
+import { clearSettings, isSettingsClearedError, loadFullStore, normalizeSettings, saveGlobalEnabled, saveGlobalSettings, subscribeSettings } from '../../src/shared/storage';
 import { DEFAULT_SETTINGS, type AspectRatioBucket, type DisplayProfile, type GestureModifier, type Language, type Settings, type SiteEntry } from '../../src/shared/types';
 import { automaticZoomFactor } from '../../src/core/eligibility';
 import { isMac } from '../../src/shared/shortcuts';
@@ -82,6 +82,8 @@ const experimentalSaveBtn = document.querySelector<HTMLButtonElement>('#experime
 const experimentalStatus = document.querySelector<HTMLElement>('#experimental-status')!;
 
 let currentGlobal: Settings = { ...DEFAULT_SETTINGS };
+let globalEpoch = 0;
+let globalRevision = 0;
 
 const zoomPresetChips = document.querySelectorAll<HTMLButtonElement>('.preset-chip');
 
@@ -187,7 +189,7 @@ masterToggleBtn.addEventListener('click', async () => {
   currentGlobal.enabled = !currentGlobal.enabled;
   updateMasterToggleUI(currentGlobal.enabled);
   try {
-    await saveGlobalSettings(currentGlobal);
+    await saveGlobalEnabled(currentGlobal.enabled);
     settingsStatus.textContent = currentGlobal.enabled
       ? i18n.t('options_status_enabled_globally')
       : i18n.t('options_status_disabled_globally');
@@ -256,7 +258,7 @@ languageSelect.addEventListener('change', async () => {
   updateDisplayProfileUI();
   void renderSavedSites();
   try {
-    await saveGlobalSettings(currentGlobal);
+    await persistGlobalSettings(currentGlobal);
     if (languageStatus) {
       languageStatus.textContent = i18n.t('options_language_status_saved');
     }
@@ -269,15 +271,27 @@ languageSelect.addEventListener('change', async () => {
 });
 
 async function loadGlobalSettings() {
+  const revision = globalRevision;
   try {
     const store = await loadFullStore();
+    if (revision !== globalRevision) return;
     currentGlobal = store.global;
+    globalEpoch = store.epoch;
     setLanguage(currentGlobal.language || 'auto');
     hydrateOptionsI18n();
     applySettingsToForm(currentGlobal);
   } catch (error) {
+    if (revision !== globalRevision) return;
     console.error('Failed to load settings:', error);
     applySettingsToForm(DEFAULT_SETTINGS);
+  }
+}
+
+async function persistGlobalSettings(settings: Settings) {
+  try { await saveGlobalSettings(settings, globalEpoch); }
+  catch (error) {
+    if (isSettingsClearedError(error)) await loadGlobalSettings();
+    throw error;
   }
 }
 
@@ -286,7 +300,7 @@ settingsSaveBtn.addEventListener('click', async () => {
   currentGlobal = next;
   settingsSaveBtn.disabled = true;
   try {
-    await saveGlobalSettings(next);
+    await persistGlobalSettings(next);
     settingsStatus.textContent = i18n.t('options_status_saved_at', [new Date().toLocaleTimeString()]);
   } catch {
     settingsStatus.textContent = i18n.t('options_status_save_failed');
@@ -305,9 +319,11 @@ settingsResetBtn.addEventListener('click', async () => {
   }
   settingsResetBtn.disabled = true;
   try {
-    await saveGlobalSettings(DEFAULT_SETTINGS);
+    await clearSettings('global');
+    await loadGlobalSettings();
     settingsStatus.textContent = i18n.t('options_status_restored_defaults');
   } catch {
+    await loadGlobalSettings();
     settingsStatus.textContent = i18n.t('options_status_restore_failed');
   } finally {
     settingsResetBtn.disabled = false;
@@ -319,7 +335,7 @@ experimentalSaveBtn.addEventListener('click', async () => {
   currentGlobal = next;
   experimentalSaveBtn.disabled = true;
   try {
-    await saveGlobalSettings(next);
+    await persistGlobalSettings(next);
     experimentalStatus.textContent = i18n.t('options_status_experimental_saved_at', [new Date().toLocaleTimeString()]);
   } catch {
     experimentalStatus.textContent = i18n.t('options_status_experimental_save_failed');
@@ -329,6 +345,15 @@ experimentalSaveBtn.addEventListener('click', async () => {
 });
 
 void loadGlobalSettings();
+const unsubscribeGlobalClears = subscribeSettings('', (next, epoch, cleared) => {
+  if (!cleared) return;
+  globalRevision++;
+  currentGlobal = next;
+  globalEpoch = epoch;
+  setLanguage(next.language);
+  hydrateOptionsI18n();
+  applySettingsToForm(next);
+});
 
 // ----------------------------------------------------------------------------
 // 3. Saved Sites Manager
@@ -452,7 +477,7 @@ async function renderSavedSites() {
           rowDelBtn.addEventListener('click', async () => {
             rowDelBtn.disabled = true;
             try {
-              await eraseSettings('site', host, bucket);
+              await clearSettings('site', host, bucket);
               sitesStatus.textContent = i18n.t('options_sites_status_deleted_profile', [bucket, host]);
               void renderSavedSites();
             } catch {
@@ -480,7 +505,7 @@ async function renderSavedSites() {
       delBtn.addEventListener('click', async () => {
         delBtn.disabled = true;
         try {
-          await eraseSettings('site', host);
+          await clearSettings('site', host);
           sitesStatus.textContent = i18n.t('options_sites_status_deleted_site', [host]);
           void renderSavedSites();
         } catch {
@@ -501,7 +526,7 @@ async function renderSavedSites() {
 sitesClearAllBtn.addEventListener('click', async () => {
   sitesClearAllBtn.disabled = true;
   try {
-    await eraseSettings('sites');
+    await clearSettings('sites');
     sitesStatus.textContent = i18n.t('options_sites_status_cleared_all');
     void renderSavedSites();
   } catch {
@@ -598,6 +623,7 @@ document.querySelector('#replace')!.addEventListener('click', () => {
 const disposeRuntime = startRuntime();
 
 window.addEventListener('pagehide', () => {
+  unsubscribeGlobalClears();
   disposeShortcuts();
   clearInterval(timer);
   disposeRuntime();

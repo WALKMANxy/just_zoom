@@ -943,6 +943,30 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     gestureTip.textContent = i18n.t('controls_gesture_tip', [formatModifier(mod)]);
   };
 
+  // Static labels are written once at construction; repaint them all when the
+  // language preference changes while this controller is alive.
+  const ambienceLabelKeys = { off: 'common_off', blur: 'common_blur', colour: 'common_colour' } as const;
+  const relabel = () => {
+    floatingButton.setAttribute('aria-label', i18n.t('controls_open_controls'));
+    panel.setAttribute('aria-label', i18n.t('controls_quick_controls_aria'));
+    quickTitle.textContent = i18n.t('controls_quick_zoom');
+    fitBtn.textContent = i18n.t('common_fit');
+    fillBtn.textContent = i18n.t('common_fill');
+    factorTitle.textContent = i18n.t('controls_zoom_factor');
+    factorOffBtn.textContent = i18n.t('common_off');
+    factorRatioBtn.textContent = i18n.t('common_screen_ratio');
+    factorManualBtn.textContent = i18n.t('common_manual');
+    resetPanBtn.textContent = i18n.t('common_reset_pan');
+    ambienceTitle.textContent = i18n.t('common_ambience');
+    ambienceRow.setAttribute('aria-label', i18n.t('controls_ambience_appearance_aria'));
+    for (const { button, value } of ambienceButtons) button.textContent = i18n.t(ambienceLabelKeys[value]);
+    settingsButton.textContent = i18n.t('controls_settings_button');
+    // Force syncLabels to rewrite the icon/label pair it normally skips when unchanged.
+    delete nativeButton.dataset.active;
+    syncLabels();
+  };
+  const unsubscribeLanguage = i18n.subscribeLanguage(() => { if (!disposed) relabel(); });
+
   let layoutFrame = 0;
   let layoutNeedsMount = false;
   const scheduleLayout = (remount: boolean) => {
@@ -1053,6 +1077,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       cancelHide();
       closePanel();
       cancelAnimationFrame(layoutFrame);
+      unsubscribeLanguage();
       pointerExclusion?.dispose();
       netflixSpacer?.remove();
       netflixSpacer = null;

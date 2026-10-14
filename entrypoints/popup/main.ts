@@ -5,7 +5,7 @@ import { AUTO_CROP_AVAILABLE } from '../../src/shared/features';
 import { i18n, setLanguage } from '../../src/shared/i18n';
 
 const app = document.querySelector<HTMLElement>('#app')!;
-let snapshot: RuntimeSnapshot = { available: false, hostname: '', adapter: '', settings: DEFAULT_SETTINGS, status: { source: 'idle', message: 'Loading…' } };
+let snapshot: RuntimeSnapshot = { available: false, hostname: '', adapter: '', settings: DEFAULT_SETTINGS, status: { source: 'idle', message: '' } };
 let queue = Promise.resolve();
 
 const node = <K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = '') => {
@@ -22,17 +22,6 @@ function reportError(message: string) {
 
 function run(command: unknown) {
   queue = queue.then(async () => {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
-    if (tab?.id && snapshot.available) {
-      try {
-        const direct = await chrome.tabs.sendMessage(tab.id, command) as RuntimeSnapshot;
-        if (direct?.settings) {
-          snapshot = direct;
-          render();
-          return;
-        }
-      } catch { /* fallback to background */ }
-    }
     const result = await chrome.runtime.sendMessage({ type: 'JZ_POPUP_COMMAND', command });
     if (!result?.settings) throw new Error(result?.error || i18n.t('popup_error_player'));
     snapshot = result;
@@ -299,26 +288,15 @@ function render() {
 
   app.append(mainControls);
 
-  const status = node('p', snapshot.status.message, 'status');
+  // The worker has no language context; render its no-player and loading states here.
+  const statusText = !snapshot.adapter ? i18n.t('popup_status_loading')
+    : !available ? i18n.t('popup_status_no_video') : snapshot.status.message;
+  const status = node('p', statusText, 'status');
   status.setAttribute('role', 'status');
   app.append(status);
 }
 
 async function loadInitialState() {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
-    if (tab?.id) {
-      try {
-        const direct = await chrome.tabs.sendMessage(tab.id, { type: 'JZ_GET_STATE' }) as RuntimeSnapshot;
-        if (direct?.settings) {
-          snapshot = direct;
-          render();
-          return;
-        }
-      } catch { /* direct message to tab failed or restricted URL, fall back to background */ }
-    }
-  } catch {}
-
   const state = await chrome.runtime.sendMessage({ type: 'JZ_POPUP_STATE' });
   if (!state?.settings) throw new Error(state?.error || 'Could not load settings.');
   snapshot = state;

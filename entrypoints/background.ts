@@ -1,5 +1,5 @@
 import { defineBackground } from 'wxt/utils/define-background';
-import { eraseSettings, loadSettings, normalizeSettings, writeSettings } from '../src/shared/storage';
+import { clearStoredSettings, isSettingsClearedError, loadFullStore, loadSettings, normalizeSettings, isSitePreferenceKey, writeGlobalPatch, writeSettings } from '../src/shared/storage';
 import type { RuntimeSnapshot } from '../src/shared/types';
 
 export default defineBackground(() => {
@@ -25,15 +25,17 @@ export default defineBackground(() => {
         if (state?.available) return { tabId: tab.id, frameId, state };
       } catch { frames.get(tab.id)?.delete(frameId); }
     }
-    // Top-frame fallback also covers newly attached runtimes before their first report, or after worker restart
+    // Top-frame fallback also covers newly attached runtimes before their first report, or after worker restart.
+    // JZ_GET_STATE runs discovery there; a reachable page without a player is returned
+    // unavailable so callers can treat it as the no-player/global-defaults case.
     try {
       const state = await chrome.tabs.sendMessage(tab.id, { type: 'JZ_GET_STATE' }, { frameId: 0 }) as RuntimeSnapshot;
-      if (state) {
+      if (state?.available) {
         const tabFrames = frames.get(tab.id) ?? new Map();
         tabFrames.set(0, { score: 1000, updated: Date.now() });
         frames.set(tab.id, tabFrames);
-        return { tabId: tab.id, frameId: 0, state };
       }
+      if (state) return { tabId: tab.id, frameId: 0, state };
     } catch {
       // Tab is not yet ready, restricted, or has no content script running
     }
@@ -43,7 +45,9 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!message || typeof message.type !== 'string') return;
     if (message.type === 'JZ_OPEN_SETTINGS' && sender.id === chrome.runtime.id) {
-      void chrome.action.openPopup().then(() => respond({ ok: true })).catch(() =>
+      // Firefox/Safari MV2 bundles expose browserAction, not action; a missing API must
+      // reach the tab fallback instead of throwing synchronously.
+      void Promise.resolve().then(() => chrome.action.openPopup()).then(() => respond({ ok: true })).catch(() =>
         chrome.tabs.create({ url: chrome.runtime.getURL('/popup.html') }).then(() => respond({ ok: true })));
       return true;
     }
@@ -73,23 +77,46 @@ export default defineBackground(() => {
       frames.set(sender.tab.id, tabFrames);
       respond({ ok: true }); return;
     }
+    if (message.type === 'JZ_STORE_GLOBAL_PATCH') {
+      // writeGlobalPatch accepts only global-only keys; anything else in the patch is ignored.
+      if (sender.id !== chrome.runtime.id || !message.patch || typeof message.patch !== 'object' || Array.isArray(message.patch)) {
+        respond({ ok: false, error: 'Invalid settings request' }); return;
+      }
+      storeQueue = storeQueue.catch(() => {}).then(() => writeGlobalPatch(message.patch));
+      void storeQueue.then(() => respond({ ok: true }), () => respond({ ok: false, error: 'Settings could not be saved' }));
+      return true;
+    }
     if (message.type === 'JZ_STORE') {
       const ownPage = sender.id === chrome.runtime.id;
       let host = '';
       try { host = new URL(sender.url ?? '').hostname; } catch { /* invalid sender */ }
-      if (!ownPage || !['site', 'global'].includes(message.scope) || (message.scope === 'site' && (!host || message.host !== host))) {
+      if (!ownPage || !['site', 'global'].includes(message.scope)
+        || !Number.isSafeInteger(message.baseEpoch) || message.baseEpoch < 0
+        || (message.bucket !== undefined && !['16:9', '21:9', '32:9', 'other'].includes(message.bucket))
+        || (message.scope === 'site' && (!host || message.host !== host))
+        || (message.siteKeys !== undefined && (!Array.isArray(message.siteKeys) || message.siteKeys.length > 32 || !message.siteKeys.every(isSitePreferenceKey)))) {
         respond({ ok: false, error: 'Invalid settings request' }); return;
       }
-      storeQueue = storeQueue.catch(() => {}).then(() => writeSettings(message.scope, host, message.settings, message.bucket));
-      void storeQueue.then(() => respond({ ok: true }), () => respond({ ok: false, error: 'Settings could not be saved' }));
+      storeQueue = storeQueue.catch(() => {}).then(() => writeSettings(message.scope, host, message.settings, message.bucket, message.baseEpoch, message.siteKeys));
+      void storeQueue.then(() => respond({ ok: true }), error => respond({ ok: false,
+        code: isSettingsClearedError(error) ? 'stale-after-clear' : undefined,
+        error: isSettingsClearedError(error) ? error.message : 'Settings could not be saved' }));
       return true;
     }
     if (message.type === 'JZ_STORE_CLEAR') {
       const ownPage = sender.id === chrome.runtime.id;
-      if (!ownPage || !['site', 'all'].includes(message.scope)) {
+      const extensionPage = sender.url?.startsWith(chrome.runtime.getURL('/'));
+      let host = '';
+      try { host = new URL(sender.url ?? '').hostname; } catch { /* invalid sender */ }
+      if (!ownPage || !['global', 'site', 'sites', 'all'].includes(message.scope)
+        || (message.bucket !== undefined && !['16:9', '21:9', '32:9', 'other'].includes(message.bucket))
+        || (message.scope === 'site' && (typeof message.host !== 'string' || !message.host || message.host.length > 253
+          || (!extensionPage && message.host !== host)))
+        || (message.scope !== 'site' && (message.host !== undefined || message.bucket !== undefined))
+        || (!extensionPage && message.scope !== 'site' && message.scope !== 'all')) {
         respond({ ok: false, error: 'Invalid settings request' }); return;
       }
-      storeQueue = storeQueue.catch(() => {}).then(() => eraseSettings(message.scope, message.host, message.bucket));
+      storeQueue = storeQueue.catch(() => {}).then(() => clearStoredSettings(message.scope, message.host, message.bucket));
       void storeQueue.then(() => respond({ ok: true }), () => respond({ ok: false, error: 'Settings could not be cleared' }));
       return true;
     }
@@ -116,23 +143,24 @@ export default defineBackground(() => {
     if (message.type === 'JZ_POPUP_STATE' || message.type === 'JZ_POPUP_COMMAND') {
       if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL('/popup.html'))) return;
       void (async () => {
-        const selected = await target().catch(() => null);
+        const reached = await target().catch(() => null);
+        const selected = reached?.state.available ? reached : null;
         if (!selected) {
           if (message.type === 'JZ_POPUP_COMMAND') {
             if (message.command?.type === 'JZ_CLEAR_ALL') {
-              storeQueue = storeQueue.catch(() => {}).then(() => eraseSettings('all'));
+              storeQueue = storeQueue.catch(() => {}).then(() => clearStoredSettings('all'));
               await storeQueue;
             } else if (message.command?.type !== 'JZ_PATCH' && message.command?.type !== 'JZ_SAVE_GLOBAL') {
               throw new Error('Play a video to use this action.');
             } else {
               storeQueue = storeQueue.catch(() => {}).then(async () => {
-                const current = await loadSettings('');
-                await writeSettings('global', '', normalizeSettings(message.command.patch ?? {}, current));
+                const current = await loadFullStore();
+                await writeSettings('global', '', normalizeSettings(message.command.patch ?? {}, current.global), undefined, current.epoch);
               });
               await storeQueue;
             }
           }
-          return { available: false, hostname: '', adapter: 'Global preferences', settings: await loadSettings(''),
+          return { available: false, hostname: reached?.state.hostname ?? '', adapter: 'Global preferences', settings: await loadSettings(''),
             status: { source: 'idle', message: 'No active video. Changes here save as global defaults.' } } satisfies RuntimeSnapshot;
         }
         if (message.type === 'JZ_POPUP_STATE') return selected.state;
@@ -146,7 +174,7 @@ export default defineBackground(() => {
   chrome.tabs.onUpdated.addListener((id, info) => { if (info.status === 'loading') frames.delete(id); });
   chrome.commands.onCommand.addListener(command => {
     void target().then(t => {
-      if (t) chrome.tabs.sendMessage(t.tabId, { type: 'JZ_ACTION', action: command }, { frameId: t.frameId });
+      if (t?.state.available) chrome.tabs.sendMessage(t.tabId, { type: 'JZ_ACTION', action: command }, { frameId: t.frameId });
     }).catch(() => {});
   });
 });

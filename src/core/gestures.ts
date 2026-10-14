@@ -41,16 +41,35 @@ export function attachGestures(binding: PlayerBinding, handlers: GesturesHandler
   let suppressClick = false;
   let clickTimeout = 0;
 
+  // Cursor claims follow the transform engine's ownership rule: snapshot the page's
+  // inline declaration, and restore it only while our written value is still present.
+  const cursorClaims = new Map<HTMLElement, { original: string; priority: string; written: string }>();
+  const claimCursor = (el: HTMLElement, value: string) => {
+    const current = el.style.getPropertyValue('cursor'), priority = el.style.getPropertyPriority('cursor');
+    let saved = cursorClaims.get(el);
+    if (!saved) cursorClaims.set(el, saved = { original: current, priority, written: '' });
+    else if (current !== saved.written || priority !== 'important') { saved.original = current; saved.priority = priority; }
+    el.style.setProperty('cursor', value, 'important');
+    saved.written = el.style.getPropertyValue('cursor');
+  };
+  const releaseCursor = (el: HTMLElement) => {
+    const saved = cursorClaims.get(el);
+    if (!saved) return;
+    cursorClaims.delete(el);
+    if (el.style.getPropertyValue('cursor') !== saved.written || el.style.getPropertyPriority('cursor') !== 'important') return;
+    if (saved.original) el.style.setProperty('cursor', saved.original, saved.priority);
+    else el.style.removeProperty('cursor');
+  };
   const updateCursor = (cursor: 'grab' | 'grabbing' | '') => {
     if (cursor === 'grabbing') {
-      document.documentElement.style.setProperty('cursor', 'grabbing', 'important');
-      viewport.style.setProperty('cursor', 'grabbing', 'important');
+      claimCursor(document.documentElement, 'grabbing');
+      claimCursor(viewport, 'grabbing');
     } else if (cursor === 'grab') {
-      document.documentElement.style.removeProperty('cursor');
-      viewport.style.setProperty('cursor', 'grab', 'important');
+      releaseCursor(document.documentElement);
+      claimCursor(viewport, 'grab');
     } else {
-      document.documentElement.style.removeProperty('cursor');
-      viewport.style.removeProperty('cursor');
+      releaseCursor(document.documentElement);
+      releaseCursor(viewport);
     }
   };
 
