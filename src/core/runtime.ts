@@ -58,11 +58,14 @@ export function startRuntime(): () => void {
   // flip portrait eligibility; re-running update() per ResizeObserver entry made every
   // fullscreen transition recompute the whole pipeline several times.
   let lastBlocked: boolean | null = null;
+  const checkEligibility = () => {
+    if (binding && portraitBlocked(binding, settings.allowPortrait) !== lastBlocked) update();
+  };
   const observeGeometry = (target: PlayerBinding) => {
     geometryObserver?.disconnect();
     geometryObserver = new ResizeObserver(() => {
       debugCount('geometryResize');
-      if (binding && portraitBlocked(binding, settings.allowPortrait) !== lastBlocked) update();
+      checkEligibility();
     });
     geometryObserver.observe(target.viewport);
     geometryObserver.observe(target.video);
@@ -393,6 +396,7 @@ export function startRuntime(): () => void {
     geometryObserver?.disconnect(); geometryObserver = null;
     binding.video.removeEventListener('loadedmetadata', sourceChanged);
     binding.video.removeEventListener('emptied', sourceChanged);
+    binding.video.removeEventListener('resize', checkEligibility);
     gestures?.dispose(); gestures = null;
     hud?.dispose(); hud = null;
     effects?.dispose(); transform?.dispose(); controls?.dispose();
@@ -603,6 +607,9 @@ export function startRuntime(): () => void {
     binding = next;
     next.video.addEventListener('loadedmetadata', sourceChanged);
     next.video.addEventListener('emptied', sourceChanged);
+    // Intrinsic size can flip portrait/landscape mid-stream without a box resize or new
+    // metadata; the discovery poll no longer re-runs update() to catch it.
+    next.video.addEventListener('resize', checkEligibility);
     status = { source: 'idle', message: i18n.t('status_manual_available') };
     controls = createControls(next, { patch, reset, resetPan, action, activate,
       saveSite: () => { void save('site', true); },
