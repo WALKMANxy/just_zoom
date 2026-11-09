@@ -327,7 +327,9 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   let binding = initialBinding;
   const nativeHost = document.createElement('div');
   nativeHost.className = 'jz-controls-host';
-  const nativeShadow = nativeHost.attachShadow({ mode: 'open' });
+  // delegatesFocus keeps the host and its inner button a single tab stop when a
+  // provider needs the host itself to look focusable (see YouTube below).
+  const nativeShadow = nativeHost.attachShadow({ mode: 'open', delegatesFocus: true });
   let pointerExclusion = initialBinding.adapter === 'Disney+' ? createDisneyPointerExclusion(nativeHost, handlers.activate) : null;
   let netflixSpacer: HTMLElement | null = null;
   const floatingHost = document.createElement('div');
@@ -778,6 +780,15 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       const siteClass = isDisney ? 'is-disney ' : isNetflix ? 'is-netflix ' : binding.adapter === 'Prime Video' ? 'is-prime ' : binding.adapter === 'YouTube' ? 'is-youtube ' : '';
       const className = `jz-controls-host native-host ${siteClass}${binding.controlClassName ?? ''}`;
       if (nativeHost.className !== className) nativeHost.className = className;
+      // YouTube's control bar treats a mouseover/mouseout target as "still on the
+      // controls" only if it or an ancestor is a focusable control (enabled
+      // button/link/input, or tabindex >= 0). Shadow retargeting hides our inner
+      // button, so without this the bar auto-hides as soon as the pointer enters.
+      if (binding.adapter === 'YouTube') {
+        if (nativeHost.getAttribute('tabindex') !== '0') nativeHost.setAttribute('tabindex', '0');
+      } else if (nativeHost.hasAttribute('tabindex')) {
+        nativeHost.removeAttribute('tabindex');
+      }
       const anchor = binding.controlAnchor ?? binding.controlBefore;
       const before = binding.controlBefore;
       if (anchor instanceof HTMLElement) {
