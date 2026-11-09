@@ -1,6 +1,7 @@
 import { debugCount } from '../shared/debug';
 import { EMPTY_CROP, type Crop, type PlayerBinding, type Settings } from '../shared/types';
 import { automaticZoomFactor, portraitBlocked } from './eligibility';
+import { createCueOverlay, type CueOverlayController } from './cue-overlay';
 
 interface OwnedStyle { original: string; priority: string; written: string; writtenPriority: string; requested: string }
 export class TransformEngine {
@@ -18,6 +19,7 @@ export class TransformEngine {
   private isWriting = false;
   private pending = 0;
   private geometryPending = 0;
+  private cues: CueOverlayController | null = null;
   private onStyleMutation = () => {
     if (this.isWriting) return;
     this.refresh();
@@ -42,6 +44,8 @@ export class TransformEngine {
     binding.video.addEventListener('loadedmetadata', this.schedule);
     binding.video.addEventListener('resize', this.schedule);
     binding.video.addEventListener('playing', this.schedule);
+    // Native subtitles would scale with the video; the overlay keeps them readable.
+    try { this.cues = createCueOverlay(() => this.binding); } catch { this.cues = null; }
   }
   update(settings: Settings, crop: Crop = this.crop, animateZoom = false, immediate = false) {
     debugCount('transformUpdate');
@@ -284,6 +288,7 @@ export class TransformEngine {
     this.binding.video.removeEventListener('loadedmetadata', this.schedule);
     this.binding.video.removeEventListener('resize', this.schedule);
     this.binding.video.removeEventListener('playing', this.schedule);
+    this.cues?.dispose(); this.cues = null;
     this.restore();
   }
 }
