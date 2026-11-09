@@ -174,7 +174,7 @@ export function startRuntime(): () => void {
         crop = next; transform?.update(settings, crop);
       }, next => {
         if (disposed || identity !== generation) return;
-        status = next; updateControls();
+        status = next; updateControls(); debugState({ status: status.source });
       });
       effects.setCrop(crop);
     }
