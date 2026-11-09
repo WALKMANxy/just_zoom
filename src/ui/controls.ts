@@ -819,11 +819,12 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
           nativeHost.style.padding = '0';
           // Netflix pins its 44px button to the wrapper's top-left rather than
           // centring it; mirror the anchor's offset so icon gaps and the hover
-          // scale origin match the neighbouring buttons.
+          // scale origin match the neighbouring buttons. Use layout sizes and the
+          // rect centre: the anchor may be mid hover scale(1.3) when we remount.
           const slotRect = slot.getBoundingClientRect(), anchorRect = anchor.getBoundingClientRect();
-          const bw = Math.round(anchorRect.width) || Math.min(w, 44), bh = Math.round(anchorRect.height) || Math.min(h, 44);
-          const dx = slot === anchor ? 0 : Math.max(0, Math.min(w - bw, Math.round(anchorRect.left - slotRect.left)));
-          const dy = slot === anchor ? 0 : Math.max(0, Math.min(h - bh, Math.round(anchorRect.top - slotRect.top)));
+          const bw = Math.min(w, width || 44), bh = Math.min(h, height || 44);
+          const dx = slot === anchor ? 0 : Math.max(0, Math.min(w - bw, Math.round(anchorRect.left + anchorRect.width / 2 - slotRect.left - bw / 2)));
+          const dy = slot === anchor ? 0 : Math.max(0, Math.min(h - bh, Math.round(anchorRect.top + anchorRect.height / 2 - slotRect.top - bh / 2)));
           nativeButton.style.width = `${bw}px`;
           nativeButton.style.height = `${bh}px`;
           nativeButton.style.margin = `${dy}px 0 0 ${dx}px`;
