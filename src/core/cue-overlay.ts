@@ -1,5 +1,6 @@
 import { debugLog } from '../shared/debug';
 import type { PlayerBinding } from '../shared/types';
+import { cueControlsElement } from './cue-adapters';
 
 // Chrome paints native text-track cues (`::cue`) inside the video box, so our
 // scale/translate also zooms the subtitles and Fill/zoom can push them off-screen.
@@ -13,7 +14,7 @@ export interface CueOverlayController { dispose(): void }
 const STYLE = `
 :host { all: initial; }
 .box { position: absolute; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: .15em;
-  text-align: center; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.25; }
+  text-align: center; transition: bottom .2s ease; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.25; }
 .cue { max-width: 90%; white-space: pre-line; color: #fff; }
 .cue > span { background: rgba(0, 0, 0, .8); padding: .05em .3em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 `;
@@ -29,7 +30,11 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   const takeovers = new Map<TextTrack, number[]>();
   const yielded = new WeakSet<TextTrack>();
   let host: HTMLDivElement | null = null, box: HTMLDivElement | null = null;
-  let frame = 0, disposed = false;
+  let frame = 0, disposed = false, needsRender = false;
+  // Optional site control bar: subtitles sit above it while it is visible.
+  let bar: HTMLElement | null = null, barTimer = 0;
+  const barMutations = new MutationObserver(() => onBarChange());
+  const barResize = new ResizeObserver(() => onBarChange());
 
   const transformed = () => {
     const scale = video.style.getPropertyValue('scale').trim();
@@ -48,7 +53,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
       // The page re-shows the track as fast as we hide it: leave it native.
       yielded.add(track); release(track); return;
     }
-    if (!owned.has(track)) { owned.set(track, track.mode); track.addEventListener('cuechange', onCueChange); }
+    if (!owned.has(track)) { owned.set(track, track.mode); track.addEventListener('cuechange', onCueChange); needsRender = true; }
     track.mode = 'hidden';
   };
 
@@ -57,6 +62,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     if (original === undefined) return;
     owned.delete(track);
     track.removeEventListener('cuechange', onCueChange);
+    needsRender = true;
     // Only hand back a mode we set; a page that disabled the track keeps its choice.
     if (restore && track.mode === 'hidden') track.mode = original;
   };
@@ -64,6 +70,42 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   const releaseAll = () => {
     for (const track of [...owned.keys()]) release(track);
     host?.remove(); host = box = null;
+    watchBar(null);
+  };
+
+  // Hiding is usually a class on an ancestor that starts a transform/opacity
+  // transition, so re-measure once more after it has run. Only the bar and a few
+  // ancestors' attributes are watched: the seek bar and clock update constantly.
+  function onBarChange() {
+    schedule();
+    clearTimeout(barTimer);
+    barTimer = window.setTimeout(schedule, 350);
+  }
+  const onBarTransition = (event: Event) => { if (event.target === bar) onBarChange(); };
+  const watchBar = (next: HTMLElement | null) => {
+    if (next === bar) return;
+    barMutations.disconnect(); barResize.disconnect();
+    bar?.removeEventListener('transitionend', onBarTransition);
+    clearTimeout(barTimer); barTimer = 0;
+    bar = next;
+    if (!bar) return;
+    for (let el: HTMLElement | null = bar, depth = 0; el && depth < 4; el = el.parentElement, depth++) {
+      barMutations.observe(el, { attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+    }
+    barResize.observe(bar);
+    bar.addEventListener('transitionend', onBarTransition);
+  };
+  // Pixels the bar covers at the bottom of the visible box, 0 when hidden.
+  const barOverlap = (r: { left: number; top: number; width: number; height: number }) => {
+    if (!bar?.isConnected) return 0;
+    const b = bar.getBoundingClientRect();
+    const bottom = r.top + r.height;
+    if (!b.width || !b.height || b.top >= bottom || b.bottom <= r.top || b.right <= r.left || b.left >= r.left + r.width) return 0;
+    for (let el: HTMLElement | null = bar, depth = 0; el && depth < 6; el = el.parentElement, depth++) {
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || Number.parseFloat(cs.opacity) < 0.05) return 0;
+    }
+    return Math.max(0, Math.min(r.height * 0.5, bottom - b.top));
   };
 
   const mount = () => {
@@ -126,7 +168,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     host.style.setProperty('height', `${r.height}px`, 'important');
     // Close to Chrome's default ::cue size, relative to the visible box.
     box.style.fontSize = `${Math.max(12, r.height * 0.05)}px`;
-    box.style.bottom = `${Math.round(r.height * 0.05)}px`;
+    box.style.bottom = `${Math.round(r.height * 0.05 + barOverlap(r))}px`;
   };
 
   const render = () => {
@@ -156,9 +198,12 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
         // The page or user turned it off: stop drawing, keep their choice.
         else if (track.mode === 'disabled' && owned.has(track)) release(track, false);
       }
-      if (!owned.size) { host?.remove(); host = box = null; return; }
+      if (!owned.size) { host?.remove(); host = box = null; watchBar(null); return; }
+      if (!host) needsRender = true;
       if (!mount()) { releaseAll(); return; }
-      position(); render();
+      watchBar(cueControlsElement(video));
+      position();
+      if (needsRender) { needsRender = false; render(); }
     } catch (error) {
       // Never leave a track stuck hidden because the overlay failed.
       debugLog('cueOverlay', String(error));
@@ -189,6 +234,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
       disposed = true;
       cancelAnimationFrame(frame); frame = 0;
       styleObserver.disconnect(); resizeObserver.disconnect();
+      watchBar(null);
       tracks.removeEventListener('change', schedule);
       tracks.removeEventListener('addtrack', schedule);
       tracks.removeEventListener('removetrack', onRemoveTrack);
