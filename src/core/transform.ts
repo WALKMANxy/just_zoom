@@ -1,4 +1,7 @@
-import { debugCount } from '../shared/debug';
+import { DEBUG, debugCount, debugState } from '../shared/debug';
+
+// Debug-only ring of recent framing writes: [ms, trigger, scale, boxW, boxH].
+const applyLog: (string | number)[][] = [];
 import { EMPTY_CROP, type Crop, type PlayerBinding, type Settings } from '../shared/types';
 import { automaticZoomFactor, portraitBlocked } from './eligibility';
 
@@ -116,7 +119,7 @@ export class TransformEngine {
     // A geometry change is not a framing edit: never replay the zoom transition.
     this.transitionMs = 0;
     cancelAnimationFrame(this.pending); this.pending = 0;
-    this.apply();
+    this.apply('ro');
   };
   // Window resize/fullscreenchange arrive before layout settles; the ResizeObserver
   // follows with final sizes, so only queue a cheap idempotent pass here.
@@ -174,7 +177,7 @@ export class TransformEngine {
   }
   private restore() { for (const el of this.owned.keys()) this.restoreElement(el); }
   private schedule = () => { if (!this.pending) this.pending = requestAnimationFrame(() => { this.pending = 0; this.apply(); }); };
-  private apply() {
+  private apply(trigger = 'raf') {
     const s = this.settings, { video, viewport } = this.binding;
     if (this.transitionMs && !this.restoreTimer && performance.now() >= this.transitionUntil) this.transitionMs = 0;
     if (!s?.enabled || !video.isConnected || portraitBlocked(this.binding, s.allowPortrait)) {
@@ -258,6 +261,11 @@ export class TransformEngine {
     targetScale = Math.max(.05, Math.min(12, targetScale));
     this.write(video, 'transform-origin', this.origin);
     this.write(video, 'scale', `${targetScale}`);
+    if (DEBUG) {
+      applyLog.push([Math.round(performance.now()), trigger, +targetScale.toFixed(4), Math.round(box.width), Math.round(box.height)]);
+      if (applyLog.length > 16) applyLog.shift();
+      debugState({ applies: applyLog });
+    }
 
     const cropDX = (c.left - c.right) * pw / 2;
     const cropDY = (c.top - c.bottom) * ph / 2;
