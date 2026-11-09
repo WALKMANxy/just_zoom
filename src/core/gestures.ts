@@ -120,7 +120,7 @@ export function attachGestures(binding: PlayerBinding, handlers: GesturesHandler
     updateCursor(show ? 'grab' : '');
   };
 
-  const finishDrag = () => {
+  const finishDrag = (suppressTrailingClick = true) => {
     if (!isDragging) return;
     isDragging = false;
 
@@ -138,6 +138,7 @@ export function attachGestures(binding: PlayerBinding, handlers: GesturesHandler
 
     // Any modifier press on the player is a gesture, moved or not: its trailing click must not
     // reach the site's click-to-play surface.
+    if (!suppressTrailingClick) return;
     suppressClick = true;
     clearTimeout(clickTimeout);
     clickTimeout = window.setTimeout(() => {
@@ -165,7 +166,14 @@ export function attachGestures(binding: PlayerBinding, handlers: GesturesHandler
 
   const onPointerDown = (event: PointerEvent) => {
     lastX = event.clientX; lastY = event.clientY;
-    if (event.button !== 0 || isDragging) return;
+    if (event.button !== 0) return;
+    // A new press from the dragging pointer means its pointerup was lost (e.g. released over
+    // browser UI with no capture and no move since); otherwise the next move would resume
+    // the old drag from its stale start point.
+    if (isDragging) {
+      if (event.pointerId !== pointerId) return;
+      finishDrag(false);
+    }
     const settings = gestureSettings();
     if (!settings || !isModifierPressed(event, settings.gestureModifier)) return;
     debugCount('gestureDownModifier');
