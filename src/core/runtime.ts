@@ -17,7 +17,7 @@ export function startRuntime(): () => void {
   const hostname = location.hostname;
   // Debug-only activation latency (ms since navigation start); stripped in release builds.
   const startedAt = performance.now();
-  let wokeAt = 0;
+  let wokeAt = 0, readyAt = 0;
   let settings: Settings = { ...DEFAULT_SETTINGS };
   let status: FeatureStatus = { source: 'idle', message: i18n.t('status_select_video') };
   let binding: PlayerBinding | null = null;
@@ -458,8 +458,21 @@ export function startRuntime(): () => void {
     if (targetNode) dormantObserver.observe(targetNode, { childList: true, subtree: true });
   };
 
+  // A freshly mounted player often turns eligible through style/opacity/size changes
+  // (no childList mutation, no media event), which otherwise waits for the 1.5 s poll.
+  // While nothing is bound, retry a few times soon after a discovery miss.
+  const MISS_DELAYS = [100, 150, 250, 500, 1000];
+  let missTimer = 0, missStep = 0;
+  const resetMiss = () => { clearTimeout(missTimer); missTimer = 0; missStep = 0; };
+  const retryMiss = () => {
+    if (missTimer || missStep >= MISS_DELAYS.length) return;
+    debugCount('discoverMiss');
+    missTimer = window.setTimeout(() => { missTimer = 0; missStep++; discover(); }, MISS_DELAYS[missStep]);
+  };
+
   const fallAsleep = () => {
     if (disposed || !isActive) return;
+    resetMiss();
     // Detach while still active so its terminal available:false report reaches the worker.
     detach();
     isActive = false;
@@ -480,6 +493,7 @@ export function startRuntime(): () => void {
     if (disposed || isActive || !isContextValid()) return;
     isActive = true;
     wokeAt = performance.now();
+    resetMiss();
     dormantObserver?.disconnect(); dormantObserver = null;
     cancelDormantRecheck();
 
@@ -507,7 +521,7 @@ export function startRuntime(): () => void {
           settingsEpoch = next.epoch;
           applyRuntimeSettings(next.settings);
         }
-        ready = true;
+        ready = true; readyAt = performance.now();
         discover();
       }
     }).catch(err => {
@@ -564,6 +578,7 @@ export function startRuntime(): () => void {
       if (!video) {
         // Excluded routes (e.g. feeds with hover previews) sleep even if preview videos remain.
         if (!isNotExcludedURL() || !document.querySelector('video')) fallAsleep();
+        else retryMiss();
         return;
       }
       const fresh = bindPlayer(video, binding!);
@@ -602,10 +617,13 @@ export function startRuntime(): () => void {
     } else {
       status = { source: 'idle', message: i18n.t('status_no_visible_video') };
       if (!isNotExcludedURL() || !document.querySelector('video')) fallAsleep();
+      else retryMiss();
     }
   };
 
   const attach = (next: PlayerBinding) => {
+    const misses = missStep;
+    resetMiss();
     binding = next;
     next.video.addEventListener('loadedmetadata', sourceChanged);
     next.video.addEventListener('emptied', sourceChanged);
@@ -620,7 +638,7 @@ export function startRuntime(): () => void {
     report();
     if (DEBUG) {
       const now = performance.now();
-      debugState({ latency: { start: Math.round(startedAt), wake: Math.round(wokeAt), attach: Math.round(now),
+      debugState({ latency: { start: Math.round(startedAt), wake: Math.round(wokeAt), ready: Math.round(readyAt), attach: Math.round(now), misses,
         wakeToAttach: Math.round(now - wokeAt), startToAttach: Math.round(now - startedAt) } });
     }
   };
@@ -781,6 +799,7 @@ export function startRuntime(): () => void {
 
   const onNavigate = () => {
     if (!isContextValid() || disposed) return;
+    missStep = 0;
     if (!isActive) {
       if (document.querySelector('video') && isNotExcludedURL()) wakeUp();
     } else {
@@ -805,6 +824,7 @@ export function startRuntime(): () => void {
     isActive = false;
     clearTimeout(scheduled); scheduled = 0;
     clearTimeout(siteSaveTimer); siteSaveTimer = 0;
+    resetMiss();
     if (poll) { clearInterval(poll); poll = 0; }
     if (reportTimer) { clearInterval(reportTimer); reportTimer = 0; }
     dormantObserver?.disconnect(); dormantObserver = null; cancelDormantRecheck();
