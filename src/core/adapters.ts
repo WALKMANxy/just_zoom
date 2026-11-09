@@ -248,6 +248,15 @@ function insertionPoint(anchor: HTMLElement, service?: string): { controls: HTML
   return controls && controls !== document.body && controls !== document.documentElement ? { controls, before } : null;
 }
 
+// The Zoom host borrows the anchor's styling classes, but never its identity:
+// a host carrying e.g. `ytp-fullscreen-button` sits before the real button in
+// DOM order, so page scripts, other extensions and our own anchor lookup would
+// resolve `.ytp-fullscreen-button` to it.
+function shareableClasses(className?: string): string | undefined {
+  if (!className) return className;
+  return className.split(/\s+/).filter(token => token && !/full-?screen/i.test(token)).join(' ');
+}
+
 export const TESTED_SERVICES = ['YouTube', 'Netflix', 'Prime Video', 'Disney+'] as const;
 export type TestedService = (typeof TESTED_SERVICES)[number];
 
@@ -288,10 +297,10 @@ export function bindPlayer(video: HTMLVideoElement, previous?: PlayerBinding): P
     controls: point?.controls ?? null,
     controlBefore: point?.before ?? null,
     controlAnchor: anchor,
-    controlClassName: service?.name === 'Netflix' ? point?.before.className
+    controlClassName: shareableClasses(service?.name === 'Netflix' ? point?.before.className
       : service?.name === 'Disney+' ? 'control'
       : service?.name === 'Prime Video' ? point?.before.className || anchor?.className
-      : anchor?.className,
+      : anchor?.className),
     adapter: service?.name ?? (isNative ? 'Native HTML5' : 'Generic HTML5'),
   };
 }
