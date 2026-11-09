@@ -1,3 +1,4 @@
+import { debugCount } from '../shared/debug';
 import { EMPTY_CROP, type Crop, type PlayerBinding, type Settings } from '../shared/types';
 import { automaticZoomFactor, portraitBlocked } from './eligibility';
 
@@ -43,6 +44,7 @@ export class TransformEngine {
     binding.video.addEventListener('playing', this.schedule);
   }
   update(settings: Settings, crop: Crop = this.crop, animateZoom = false, immediate = false) {
+    debugCount('transformUpdate');
     const previous = this.settings;
     this.settings = settings;
     const framingChanged = previous === null || (['zoomApplied', 'zoom', 'zoomType', 'zoomStrategy', 'mode', 'panX', 'panY', 'displayProfile', 'customDisplayAspectRatio'] as const)

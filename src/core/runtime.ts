@@ -1,3 +1,4 @@
+import { debugCount, debugLog, debugState, debugTime } from '../shared/debug';
 import { DEFAULT_SETTINGS, EMPTY_CROP, type AspectRatioBucket, type Crop, type FeatureStatus, type PlayerBinding, type PlayerControls, type RuntimeSnapshot, type Settings, type ZoomAction } from '../shared/types';
 import { FRAMING_KEYS, GLOBAL_ONLY_KEYS, SITE_PREFERENCE_KEYS, clearSettings, isContextInvalidationError, isContextValid, isSettingsClearedError, loadSettingsSnapshot, markContextInvalid, normalizeSettings, saveGlobalPatch, saveGlobalSettings, saveSiteSettings, subscribeSettings } from '../shared/storage';
 import { createControls } from '../ui/controls';
@@ -99,7 +100,8 @@ export function startRuntime(): () => void {
       }
     }
   };
-  const update = (animateZoom = false, immediate = false) => {
+  const update = (animateZoom = false, immediate = false) => debugTime('update', () => updateNow(animateZoom, immediate));
+  const updateNow = (animateZoom: boolean, immediate: boolean) => {
     if (!binding) return;
     const blocked = portraitBlocked(binding, settings.allowPortrait);
     if (!settings.enabled || blocked) {
@@ -112,7 +114,7 @@ export function startRuntime(): () => void {
         nativePlayer = null;
         if (binding) {
           geometryObserver?.disconnect();
-          geometryObserver = new ResizeObserver(() => update());
+          geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
           geometryObserver.observe(binding.viewport);
           geometryObserver.observe(binding.video);
         }
@@ -127,7 +129,7 @@ export function startRuntime(): () => void {
           saveGlobal: () => { void save('global'); },
         }, settings);
         geometryObserver?.disconnect();
-        geometryObserver = new ResizeObserver(() => update());
+        geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
         geometryObserver.observe(binding.viewport);
         geometryObserver.observe(binding.video);
       } else {
@@ -137,7 +139,7 @@ export function startRuntime(): () => void {
       nativePlayer.dispose();
       nativePlayer = null;
       geometryObserver?.disconnect();
-      geometryObserver = new ResizeObserver(() => update());
+      geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
       geometryObserver.observe(binding.viewport);
       geometryObserver.observe(binding.video);
     }
@@ -172,6 +174,12 @@ export function startRuntime(): () => void {
       effects.setCrop(crop);
     }
     transform.update(settings, crop, animateZoom, immediate); effects.update({ ...settings, autoCrop: settings.autoCrop && settings.zoomApplied }); updateControls();
+    debugState({
+      adapter: binding.adapter, fullscreen: document.fullscreenElement?.tagName ?? null,
+      video: `${binding.video.videoWidth}x${binding.video.videoHeight}`,
+      settings: { enabled: settings.enabled, zoomApplied: settings.zoomApplied, mode: settings.mode, zoom: settings.zoom, panX: settings.panX, panY: settings.panY, autoCrop: settings.autoCrop, ambience: settings.ambience },
+      crop, status: status.source,
+    });
   };
   const patch = (change: Partial<Settings>, immediate = false) => {
     if (clearInProgress) return;
@@ -283,6 +291,7 @@ export function startRuntime(): () => void {
     }
   };
   const activate = () => {
+    debugLog('activate');
     if (clearInProgress) return;
     if (settings.zoomApplied) {
       patch({ zoomApplied: false });
@@ -373,6 +382,7 @@ export function startRuntime(): () => void {
   };
   const sourceChanged = () => { crop = { ...EMPTY_CROP }; effects?.reset(); update(); };
   const detach = () => {
+    debugLog('detach'); debugState({ adapter: null });
     if (!binding) return;
     generation++;
     geometryObserver?.disconnect(); geometryObserver = null;
@@ -537,7 +547,8 @@ export function startRuntime(): () => void {
     discover();
   };
 
-  const discover = () => {
+  const discover = () => debugTime('discover', discoverNow);
+  const discoverNow = () => {
     scheduled = 0;
     if (disposed || !ready || !isContextValid() || !isActive) return;
     syncDisneyControlObserver();
@@ -565,7 +576,7 @@ export function startRuntime(): () => void {
         gestures?.dispose(); gestures = null;
         hud?.rebind(fresh);
         geometryObserver?.disconnect();
-        geometryObserver = new ResizeObserver(() => update());
+        geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
         geometryObserver.observe(fresh.viewport);
         geometryObserver.observe(fresh.video);
         const savedCrop = { ...crop };
@@ -597,7 +608,7 @@ export function startRuntime(): () => void {
       saveSite: () => { void save('site', true); },
       saveGlobal: () => { void save('global'); },
     });
-    geometryObserver = new ResizeObserver(() => update());
+    geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
     geometryObserver.observe(next.viewport); geometryObserver.observe(next.video);
     update();
     report();
@@ -605,6 +616,7 @@ export function startRuntime(): () => void {
 
   const schedule = (immediate = false) => {
     if (disposed || !isContextValid() || !isActive) return;
+    debugCount('schedule');
     if (scheduled) {
       if (!immediate) return;
       clearTimeout(scheduled);
@@ -679,12 +691,14 @@ export function startRuntime(): () => void {
 
   const onFullscreenChange = () => {
     if (!isContextValid() || disposed) return;
+    debugCount('fullscreenchange'); debugLog('fullscreenchange', document.fullscreenElement?.tagName ?? null);
     if (isActive) schedule();
     else if (document.querySelector('video')) wakeUp();
   };
 
   const onResize = () => {
     if (!isContextValid() || disposed) return;
+    debugCount('windowResize');
     if (isActive && !document.hidden) {
       checkScreenChange();
       schedule();

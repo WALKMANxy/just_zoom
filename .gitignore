@@ -1,6 +1,8 @@
 node_modules/
 .wxt/
 .output/
+.output-test/
+.testbuild/
 artifacts/
 framing/
 docs/

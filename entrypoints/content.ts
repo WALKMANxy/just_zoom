@@ -2,6 +2,7 @@ import { defineContentScript } from 'wxt/utils/define-content-script';
 import { startRuntime } from '../src/core/runtime';
 import { isContextInvalidationError, markContextInvalid } from '../src/shared/storage';
 import { guardOrphanedContext } from '../src/core/context-lifecycle';
+import { installDebugChannel } from '../src/shared/debug';
 
 export default defineContentScript({
   matches: ['<all_urls>'], allFrames: true, matchAboutBlank: true, runAt: 'document_idle',
@@ -21,6 +22,8 @@ export default defineContentScript({
         if (!isContextInvalidationError(error)) throw error;
       }
     });
-    dispose = startRuntime();
+    const stopRuntime = startRuntime();
+    const stopDebug = installDebugChannel();
+    dispose = () => { stopDebug(); stopRuntime(); };
   },
 });

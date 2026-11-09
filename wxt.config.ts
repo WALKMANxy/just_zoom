@@ -1,7 +1,18 @@
 import { defineConfig } from 'wxt';
 
+// Node globals without pulling @types/node into the extension typecheck.
+declare const process: { env: Record<string, string | undefined> };
+
 export default defineConfig({
   modules: ['@wxt-dev/i18n/module'],
+  ...(process.env.JZ_OUT_DIR ? { outDir: process.env.JZ_OUT_DIR } : {}),
+  // JZ_DEBUG=1 (set by tools/test-build.mjs) enables src/shared/debug.ts; release builds strip it.
+  vite: () => ({
+    define: {
+      __JZ_DEBUG__: JSON.stringify(process.env.JZ_DEBUG === '1'),
+      __JZ_BUILD_ID__: JSON.stringify(process.env.JZ_BUILD_ID ?? 'release'),
+    },
+  }),
   zip: {
     excludeSources: ['**/artifacts/**', '**/framing/**', '**/docs/**', '**/scripts/**', '**/store_media/**', '**/AGENTS.md', 'index*.html'],
   },

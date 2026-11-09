@@ -1,6 +1,7 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { clearStoredSettings, isSettingsClearedError, loadFullStore, loadSettings, normalizeSettings, isSitePreferenceKey, writeGlobalPatch, writeSettings } from '../src/shared/storage';
 import type { RuntimeSnapshot } from '../src/shared/types';
+import { DEBUG } from '../src/shared/debug';
 
 export default defineBackground(() => {
   const frames = new Map<number, Map<number, { score: number; updated: number }>>();
@@ -44,6 +45,10 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (!message || typeof message.type !== 'string') return;
+    // Debug builds only: lets browser automation reload the unpacked extension from disk.
+    if (DEBUG && message.type === 'JZ_DEV_RELOAD' && sender.id === chrome.runtime.id) {
+      respond({ ok: true }); setTimeout(() => chrome.runtime.reload(), 50); return;
+    }
     if (message.type === 'JZ_OPEN_SETTINGS' && sender.id === chrome.runtime.id) {
       // Firefox/Safari MV2 bundles expose browserAction, not action; a missing API must
       // reach the tab fallback instead of throwing synchronously.
