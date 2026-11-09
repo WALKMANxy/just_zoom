@@ -4,7 +4,7 @@ import { FRAMING_KEYS, GLOBAL_ONLY_KEYS, SITE_PREFERENCE_KEYS, clearSettings, is
 import { createControls } from '../ui/controls';
 import { createNativePlayer, type NativePlayerController } from '../ui/native-player';
 import { EffectsController } from '../features/effects';
-import { bindPlayer, disneyControlRoots } from './adapters';
+import { bindPlayer, disneyControlRoots, isTestedService } from './adapters';
 import { findShadowVideos, isNotExcludedURL, selectVideo } from './discovery';
 import { TransformEngine } from './transform';
 import { automaticZoomFactor, getDisplayAspectBucket, portraitBlocked } from './eligibility';
@@ -54,6 +54,19 @@ export function startRuntime(): () => void {
     editedSiteKeys.clear();
   };
   let geometryObserver: ResizeObserver | null = null;
+  // The transform engine follows geometry itself. The runtime only needs resizes that
+  // flip portrait eligibility; re-running update() per ResizeObserver entry made every
+  // fullscreen transition recompute the whole pipeline several times.
+  let lastBlocked: boolean | null = null;
+  const observeGeometry = (target: PlayerBinding) => {
+    geometryObserver?.disconnect();
+    geometryObserver = new ResizeObserver(() => {
+      debugCount('geometryResize');
+      if (binding && portraitBlocked(binding, settings.allowPortrait) !== lastBlocked) update();
+    });
+    geometryObserver.observe(target.viewport);
+    geometryObserver.observe(target.video);
+  };
   let lastScreenWidth = typeof screen !== 'undefined' ? screen.width : 0;
   let lastScreenHeight = typeof screen !== 'undefined' ? screen.height : 0;
   const currentBucket = (): AspectRatioBucket => getDisplayAspectBucket(settings?.displayProfile, settings?.customDisplayAspectRatio);
@@ -104,6 +117,7 @@ export function startRuntime(): () => void {
   const updateNow = (animateZoom: boolean, immediate: boolean) => {
     if (!binding) return;
     const blocked = portraitBlocked(binding, settings.allowPortrait);
+    lastBlocked = blocked;
     if (!settings.enabled || blocked) {
       if (effects || transform) generation++;
       effects?.dispose(); effects = null; transform?.dispose(); transform = null;
@@ -113,10 +127,7 @@ export function startRuntime(): () => void {
         nativePlayer.dispose();
         nativePlayer = null;
         if (binding) {
-          geometryObserver?.disconnect();
-          geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
-          geometryObserver.observe(binding.viewport);
-          geometryObserver.observe(binding.video);
+          observeGeometry(binding);
         }
       }
       status = { source: 'idle', message: blocked ? 'Portrait video or player: visual processing paused. Allow portrait to apply.' : 'Disabled on this player. Enable to resume.' }; updateControls(); return;
@@ -128,20 +139,14 @@ export function startRuntime(): () => void {
           saveSite: () => { void save('site', true); },
           saveGlobal: () => { void save('global'); },
         }, settings);
-        geometryObserver?.disconnect();
-        geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
-        geometryObserver.observe(binding.viewport);
-        geometryObserver.observe(binding.video);
+        observeGeometry(binding);
       } else {
         nativePlayer.update(settings);
       }
     } else if (nativePlayer) {
       nativePlayer.dispose();
       nativePlayer = null;
-      geometryObserver?.disconnect();
-      geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
-      geometryObserver.observe(binding.viewport);
-      geometryObserver.observe(binding.video);
+      observeGeometry(binding);
     }
     if (!transform) transform = new TransformEngine(binding);
     if (!hud) hud = createHud(binding);
@@ -512,10 +517,7 @@ export function startRuntime(): () => void {
     const targetNode = document.body ?? document.documentElement;
     activeObserver = new MutationObserver(records => {
       if (document.hidden || !isContextValid() || disposed || !isActive) return;
-      if (records.some(record => !isOwnedNode(record.target)
-        && [...record.addedNodes, ...record.removedNodes].some(node => node instanceof Element && !isOwnedNode(node)))) {
-        schedule();
-      }
+      if (records.some(relevantMutation)) schedule();
     });
     if (targetNode) activeObserver.observe(targetNode, { childList: true, subtree: true });
     syncDisneyControlObserver();
@@ -565,8 +567,9 @@ export function startRuntime(): () => void {
       const controlsChanged = fresh.controls !== binding!.controls || fresh.controlBefore !== binding!.controlBefore
         || fresh.controlAnchor !== binding!.controlAnchor || fresh.adapter !== binding!.adapter;
       if (!viewportChanged && !controlsChanged) {
+        // Nothing about the binding changed; settings, source and geometry changes reach
+        // update() through their own listeners, so only repair overwritten styles here.
         transform?.refresh();
-        update();
         return;
       }
       binding = fresh;
@@ -575,10 +578,7 @@ export function startRuntime(): () => void {
         transform?.rebind(fresh);
         gestures?.dispose(); gestures = null;
         hud?.rebind(fresh);
-        geometryObserver?.disconnect();
-        geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
-        geometryObserver.observe(fresh.viewport);
-        geometryObserver.observe(fresh.video);
+        observeGeometry(fresh);
         const savedCrop = { ...crop };
         if (effects) { effects.dispose(); effects = null; }
         crop = savedCrop;
@@ -608,8 +608,7 @@ export function startRuntime(): () => void {
       saveSite: () => { void save('site', true); },
       saveGlobal: () => { void save('global'); },
     });
-    geometryObserver = new ResizeObserver(() => { debugCount('geometryResize'); update(); });
-    geometryObserver.observe(next.viewport); geometryObserver.observe(next.video);
+    observeGeometry(next);
     update();
     report();
   };
@@ -622,6 +621,25 @@ export function startRuntime(): () => void {
       clearTimeout(scheduled);
     }
     scheduled = window.setTimeout(discover, immediate ? 0 : 200);
+  };
+  // While a player is bound, most page mutations (feeds, comments, tooltips) cannot change
+  // the binding. Rediscover only when a video appears or a bound node leaves the DOM; the
+  // 1.5s poll still catches anything subtler, such as a video rendered inside a new shadow root.
+  const touchesBinding = (node: Element) => !!binding && (node.contains(binding.video) || node.contains(binding.viewport)
+    || (!!binding.controls && node.contains(binding.controls)) || (!!binding.controlAnchor && node.contains(binding.controlAnchor)));
+  const relevantMutation = (record: MutationRecord) => {
+    if (isOwnedNode(record.target)) return false;
+    // A tested service still waiting for its control bar must react to any insertion.
+    const broad = !binding || (!binding.controlAnchor && isTestedService(binding.adapter));
+    for (const node of record.addedNodes) {
+      if (!(node instanceof Element) || isOwnedNode(node)) continue;
+      if (broad || node instanceof HTMLVideoElement || node.querySelector('video')) return true;
+    }
+    for (const node of record.removedNodes) {
+      if (!(node instanceof Element) || isOwnedNode(node)) continue;
+      if (broad || touchesBinding(node)) return true;
+    }
+    return false;
   };
   const isOwnedNode = (node: Node) => node instanceof Element
     && (node.matches('.jz-controls-host,.jz-native-player,[data-just-zoom="ambience"]') || !!node.closest('.jz-controls-host,.jz-native-player'));
@@ -692,6 +710,7 @@ export function startRuntime(): () => void {
   const onFullscreenChange = () => {
     if (!isContextValid() || disposed) return;
     debugCount('fullscreenchange'); debugLog('fullscreenchange', document.fullscreenElement?.tagName ?? null);
+    debugState({ fullscreen: document.fullscreenElement?.tagName ?? null });
     if (isActive) schedule();
     else if (document.querySelector('video')) wakeUp();
   };
@@ -780,6 +799,9 @@ export function startRuntime(): () => void {
 
   const teardown = () => {
     if (disposed) return;
+    // Detach first: once disposed, report() is a no-op and the worker would keep a stale
+    // available:true for this frame.
+    if (isActive) detach();
     disposed = true;
     isActive = false;
     clearTimeout(scheduled); scheduled = 0;
@@ -800,7 +822,6 @@ export function startRuntime(): () => void {
     try { removeShortcuts?.(); } catch { /* context invalidated */ } removeShortcuts = null;
     try { unsubscribe?.(); } catch { /* context invalidated */ } unsubscribe = null;
     try { chrome.runtime.onMessage.removeListener(onMessage); } catch { /* context invalidated */ }
-    report();
     detach();
   };
   return teardown;
