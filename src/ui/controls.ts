@@ -611,12 +611,12 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   floatingSurface.addEventListener('pointerleave', onSurfaceLeave);
 
   const isolateEvents = (shadow: ShadowRoot, host: HTMLElement) => {
-    shadow.addEventListener('keydown', (event) => {
-      if ((event as KeyboardEvent).key !== 'Escape') return;
-      event.preventDefault();
-      closePanel(true);
-    });
     if (host === floatingHost) {
+      shadow.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).key !== 'Escape') return;
+        event.preventDefault();
+        closePanel(true);
+      });
       shadow.addEventListener('focusin', () => {
         cancelHide();
         setFloatingVisible(true);
@@ -630,7 +630,16 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     }
     // Bubble-phase isolation preserves each control's own target event handlers.
     for (const type of EVENT_TYPES) {
-      shadow.addEventListener(type, (event) => event.stopPropagation());
+      shadow.addEventListener(type, (event) => {
+        // A focused native-bar button must behave like the provider's own buttons:
+        // only the keys that activate it stay local, so player shortcuts (f, k,
+        // arrows, Escape) and the gesture modifier still reach the page.
+        if (host === nativeHost && (type === 'keydown' || type === 'keyup')) {
+          const key = (event as KeyboardEvent).key;
+          if (key !== 'Enter' && key !== ' ') return;
+        }
+        event.stopPropagation();
+      });
     }
   };
   isolateEvents(nativeShadow, nativeHost);
