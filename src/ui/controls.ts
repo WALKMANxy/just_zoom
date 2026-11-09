@@ -786,6 +786,9 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
         const beforeCs = before instanceof HTMLElement ? getComputedStyle(before) : null;
         nativeHost.style.top = '';
         nativeHost.style.left = '';
+        if (binding.adapter !== 'Netflix' && nativeButton.style.width) {
+          nativeButton.style.width = nativeButton.style.height = nativeButton.style.margin = '';
+        }
 
         if (binding.adapter === 'Netflix') {
           // Take the fullscreen wrapper's slot (52px around a 44px button) so the
@@ -796,13 +799,23 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
           nativeHost.style.display = 'inline-flex';
           nativeHost.style.position = 'relative';
           nativeHost.style.flex = '0 0 auto';
-          nativeHost.style.alignItems = 'center';
-          nativeHost.style.justifyContent = 'center';
+          nativeHost.style.alignItems = 'flex-start';
+          nativeHost.style.justifyContent = 'flex-start';
           nativeHost.style.alignSelf = 'center';
           nativeHost.style.verticalAlign = 'middle';
           nativeHost.style.width = `${w}px`;
           nativeHost.style.height = `${h}px`;
           nativeHost.style.padding = '0';
+          // Netflix pins its 44px button to the wrapper's top-left rather than
+          // centring it; mirror the anchor's offset so icon gaps and the hover
+          // scale origin match the neighbouring buttons.
+          const slotRect = slot.getBoundingClientRect(), anchorRect = anchor.getBoundingClientRect();
+          const bw = Math.round(anchorRect.width) || Math.min(w, 44), bh = Math.round(anchorRect.height) || Math.min(h, 44);
+          const dx = slot === anchor ? 0 : Math.max(0, Math.min(w - bw, Math.round(anchorRect.left - slotRect.left)));
+          const dy = slot === anchor ? 0 : Math.max(0, Math.min(h - bh, Math.round(anchorRect.top - slotRect.top)));
+          nativeButton.style.width = `${bw}px`;
+          nativeButton.style.height = `${bh}px`;
+          nativeButton.style.margin = `${dy}px 0 0 ${dx}px`;
           nativeHost.style.lineHeight = '0';
           if (beforeCs?.margin && beforeCs.margin !== '0px') {
             nativeHost.style.margin = beforeCs.margin;
@@ -812,7 +825,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
             nativeHost.style.margin = '0';
           }
           nativeHost.style.pointerEvents = 'auto';
-          nativeHost.style.setProperty('--jz-icon-size', `${Math.max(24, Math.min(w, width || 44))}px`);
+          nativeHost.style.setProperty('--jz-icon-size', `${Math.max(24, bw)}px`);
           nativeButton.style.color = '#fff';
 
           if (!netflixSpacer) {
