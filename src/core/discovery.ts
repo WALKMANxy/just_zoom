@@ -222,8 +222,18 @@ export function selectVideo(current?: HTMLVideoElement | null, finderMode: Video
   // Open shadow roots need a full tree walk, so skip it only when a playing
   // document video already dominates the viewport. Otherwise a light-DOM preview
   // could displace a larger (or the currently bound) shadow-DOM player.
+  // A paused bound player (watch page, Netflix pause screen) used to force that walk on
+  // every discovery pass, which dominated idle cost on large pages; keep a large current
+  // video too.
   const lightWinner = winner as HTMLVideoElement | null;
-  const dominant = lightWinner !== null && !lightWinner.paused && best >= innerWidth * innerHeight * 0.25 * 3;
+  let dominant = false;
+  if (lightWinner !== null) {
+    const fs = document.fullscreenElement;
+    const rect = lightWinner.getBoundingClientRect();
+    const share = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(0, rect.left)) * Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(0, rect.top)) / (innerWidth * innerHeight || 1);
+    dominant = Boolean(fs && (fs === lightWinner || fs.contains(lightWinner)))
+      || (!lightWinner.paused && share >= 0.25) || (lightWinner === current && share >= 0.4);
+  }
   const currentInShadow = current?.isConnected && current.getRootNode() instanceof ShadowRoot;
   if (document.body && (!dominant || currentInShadow)) {
     for (const video of findShadowVideos(document.body, finderMode)) consider(video);

@@ -1,4 +1,7 @@
-import { debugCount } from '../shared/debug';
+import { DEBUG, debugCount, debugState } from '../shared/debug';
+
+// Debug-only ring of recent framing writes: [ms, trigger, scale, boxW, boxH].
+const applyLog: (string | number)[][] = [];
 import { EMPTY_CROP, type Crop, type PlayerBinding, type Settings } from '../shared/types';
 import { automaticZoomFactor, portraitBlocked } from './eligibility';
 
@@ -17,7 +20,9 @@ export class TransformEngine {
   private styleObserver: MutationObserver | null = null;
   private isWriting = false;
   private pending = 0;
-  private geometryPending = 0;
+  // A framing transition is one-shot: later passes inside its window keep the same
+  // transition so they do not cancel it, and passes after it write 'none'.
+  private transitionUntil = 0;
   private onStyleMutation = () => {
     if (this.isWriting) return;
     this.refresh();
@@ -29,7 +34,7 @@ export class TransformEngine {
       const matrix = new DOMMatrix(getComputedStyle(binding.video).transform);
       if (matrix.m41 < 0 && matrix.m42 < 0) this.origin = 'left top';
     } catch { /* A video with no transform uses the centered origin. */ }
-    this.observer = new ResizeObserver(this.geometryChanged);
+    this.observer = new ResizeObserver(this.resized);
     this.observer.observe(binding.viewport);
     this.observer.observe(binding.video);
     this.styleObserver = new MutationObserver(this.onStyleMutation);
@@ -53,6 +58,8 @@ export class TransformEngine {
       clearTimeout(this.restoreTimer); this.restoreTimer = 0;
       this.transitionMs = !immediate && previous && this.animationsAllowed() && (settings.zoomApplied || animateZoom)
         ? previous.zoom !== settings.zoom ? 400 : 300 : 0;
+      // Covers the frame between update() and the scheduled apply().
+      this.transitionUntil = performance.now() + this.transitionMs + 50;
     }
     if (!settings.enabled || !this.animationsAllowed()) {
       this.transitionMs = 0;
@@ -83,7 +90,7 @@ export class TransformEngine {
     if (binding.viewport !== binding.video) {
       this.styleObserver.observe(binding.viewport, { attributes: true, attributeFilter: ['style'] });
     }
-    this.geometryChanged();
+    this.transitionMs = 0;
     this.schedule();
   }
   refresh() {
@@ -99,21 +106,27 @@ export class TransformEngine {
       && !/(^|\.)netflix\.com$/.test(location.hostname)
       && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
-  private geometryChanged = () => {
+  private geometryDependent() {
     // Fixed manual zoom factors remain constant across viewport resize/fullscreen.
-    // Only geometry-dependent framing requires recalculation, avoiding interrupting CSS transitions.
     const s = this.settings;
-    if (s && !s.autoCrop && s.zoomType === 'factor' && s.zoomStrategy !== 'automatic' && !s.panX && !s.panY && !Object.values(this.crop).some(Boolean)) return;
+    return !(s && !s.autoCrop && s.zoomType === 'factor' && s.zoomStrategy !== 'automatic' && !s.panX && !s.panY && !Object.values(this.crop).some(Boolean));
+  }
+  // ResizeObserver delivers after layout and before paint, so applying here frames the
+  // new box in the same frame. Deferring (the old two-rAF wait) painted one or two frames
+  // with the previous scale, which showed as a jump on every fullscreen toggle.
+  private resized = () => {
+    if (!this.geometryDependent()) return;
+    // A geometry change is not a framing edit: never replay the zoom transition.
+    this.transitionMs = 0;
     cancelAnimationFrame(this.pending); this.pending = 0;
-    cancelAnimationFrame(this.geometryPending);
-    // Coalesce layout changes across two animation frames to allow the browser
-    // and player DOM to settle their fullscreen layout before recalculating transforms.
-    this.geometryPending = requestAnimationFrame(() => {
-      this.geometryPending = requestAnimationFrame(() => {
-        this.geometryPending = 0;
-        this.apply();
-      });
-    });
+    this.apply('ro');
+  };
+  // Window resize/fullscreenchange arrive before layout settles; the ResizeObserver
+  // follows with final sizes, so only queue a cheap idempotent pass here.
+  private geometryChanged = () => {
+    if (!this.geometryDependent()) return;
+    this.transitionMs = 0;
+    this.schedule();
   };
   private write(el: HTMLElement, property: string, value: string) {
     let entries = this.owned.get(el);
@@ -163,9 +176,10 @@ export class TransformEngine {
     entries!.delete(property);
   }
   private restore() { for (const el of this.owned.keys()) this.restoreElement(el); }
-  private schedule = () => { if (!this.pending && !this.geometryPending) this.pending = requestAnimationFrame(() => { this.pending = 0; this.apply(); }); };
-  private apply() {
+  private schedule = () => { if (!this.pending) this.pending = requestAnimationFrame(() => { this.pending = 0; this.apply(); }); };
+  private apply(trigger = 'raf') {
     const s = this.settings, { video, viewport } = this.binding;
+    if (this.transitionMs && !this.restoreTimer && performance.now() >= this.transitionUntil) this.transitionMs = 0;
     if (!s?.enabled || !video.isConnected || portraitBlocked(this.binding, s.allowPortrait)) {
       this.restore();
       return;
@@ -247,6 +261,11 @@ export class TransformEngine {
     targetScale = Math.max(.05, Math.min(12, targetScale));
     this.write(video, 'transform-origin', this.origin);
     this.write(video, 'scale', `${targetScale}`);
+    if (DEBUG) {
+      applyLog.push([Math.round(performance.now()), trigger, +targetScale.toFixed(4), Math.round(box.width), Math.round(box.height)]);
+      if (applyLog.length > 16) applyLog.shift();
+      debugState({ applies: applyLog });
+    }
 
     const cropDX = (c.left - c.right) * pw / 2;
     const cropDY = (c.top - c.bottom) * ph / 2;
@@ -273,9 +292,7 @@ export class TransformEngine {
     clearTimeout(this.restoreTimer);
     this.restoreTimer = 0;
     cancelAnimationFrame(this.pending);
-    cancelAnimationFrame(this.geometryPending);
     this.pending = 0;
-    this.geometryPending = 0;
     this.observer.disconnect();
     this.styleObserver?.disconnect();
     this.styleObserver = null;

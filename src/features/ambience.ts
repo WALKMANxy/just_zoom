@@ -27,11 +27,13 @@ export class AmbienceRenderer {
       // Clipping belongs to the transform owner; overlapping style ownership
       // would prevent exact restoration when controllers are disposed in order.
       this.write('isolation', 'isolate');
+      // Styled once at creation: update() runs on every effects wake (fullscreen,
+      // resize, play/pause), and rewriting styles there only produced style mutations.
+      this.canvas.style.filter = 'none';
+      this.canvas.style.transform = 'scale(1.25)';
+      this.canvas.style.transition = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'none' : 'opacity 180ms ease';
       host.prepend(this.canvas);
     }
-    this.canvas.style.filter = 'none';
-    this.canvas.style.transform = 'scale(1.25)';
-    this.canvas.style.transition = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'none' : 'opacity 180ms ease';
   }
   private write(property: string, written: string): void {
     const style = this.binding.viewport.style;
