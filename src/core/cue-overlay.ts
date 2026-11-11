@@ -5,10 +5,12 @@ import { readCueRules, resolveCueValue, type CueRules } from './cue-style';
 
 // Chrome paints native text-track cues (`::cue`) inside the video box, so our
 // scale/translate also zooms the subtitles and Fill/zoom can push them off-screen.
-// While the video is transformed we set showing subtitle/caption tracks to
-// `hidden` (cues and `cuechange` keep firing, Chrome stops painting) and draw the
-// active cues ourselves over the visible player box. Identity framing, a native
-// video fullscreen (nothing can be layered over it) or dispose hands the tracks back.
+// While just_zoom is active on the player (this controller lives exactly as long as
+// the TransformEngine) we set showing subtitle/caption tracks to `hidden` (cues and
+// `cuechange` keep firing, Chrome stops painting) and draw the active cues ourselves
+// over the visible player box, at any zoom, for consistent styling and the control
+// bar lift. A native video fullscreen (nothing can be layered over it) or dispose
+// hands the tracks back.
 
 export interface CueOverlayController { dispose(): void }
 
@@ -44,12 +46,6 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     if (next.signature === cueRules.signature) return false;
     cueRules = next; appliedCss = '';
     return true;
-  };
-
-  const transformed = () => {
-    const scale = video.style.getPropertyValue('scale').trim();
-    const translate = video.style.getPropertyValue('translate').trim();
-    return (scale !== '' && scale !== '1') || (translate !== '' && !/^0(px)?( 0(px)?)?$/.test(translate));
   };
 
   const onCueChange = () => { try { if (refreshStyle()) schedule(); render(); } catch (error) { debugLog('cueOverlay', String(error)); } };
@@ -212,7 +208,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     frame = 0;
     if (disposed) return;
     try {
-      const active = transformed() && video.isConnected && document.fullscreenElement !== video;
+      const active = video.isConnected && document.fullscreenElement !== video;
       if (!active) { if (owned.size || host) releaseAll(); return; }
       for (const track of Array.from(tracks)) {
         if (!isSubtitleTrack(track)) continue;
@@ -238,8 +234,8 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     schedule();
   };
 
-  // Our own scale/translate writes are inline styles on the video.
-  const styleObserver = new MutationObserver(schedule);
+  // A bare video's visible box depends on our inline scale/translate: re-position on writes.
+  const styleObserver = new MutationObserver(() => { if (host) schedule(); });
   styleObserver.observe(video, { attributes: true, attributeFilter: ['style'] });
   const resizeObserver = new ResizeObserver(() => { if (host) schedule(); });
   resizeObserver.observe(getBinding().viewport);
