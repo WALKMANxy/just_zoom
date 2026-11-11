@@ -7,7 +7,7 @@ import type {
 } from '../shared/types';
 import { isContextValid } from '../shared/storage';
 import { portraitBlocked } from '../core/eligibility';
-import { createDisneyPointerExclusion } from '../core/adapters';
+import { createDisneyPointerExclusion, nativeReplacesFloating } from '../core/adapters';
 import { formatModifier } from '../shared/shortcuts';
 import { i18n } from '../shared/i18n';
 
@@ -101,6 +101,17 @@ const STYLE = `
   :host(.is-prime) .native-button:focus-visible {
     opacity: 1;
     background: rgba(255, 255, 255, .1);
+  }
+  /* Stremio: the host carries Stremio's own button classes (4rem box, .75rem
+     radius, rgba(255,255,255,.05) hover overlay); the inner button only draws
+     the icon and the focus ring, clipped to the same radius. */
+  :host(.is-stremio) .native-button {
+    border-radius: inherit;
+    transition: none;
+  }
+  :host(.is-stremio) .native-button:focus-visible {
+    outline: var(--focus-outline-size, 2px) solid #fff;
+    outline-offset: calc(-1 * var(--focus-outline-size, 2px));
   }
   /* Mirrors of each provider's own bar tooltip (values measured live). */
   .jz-tooltip { display: none; }
@@ -758,7 +769,8 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     const wantsNative = settings.controlMode === 'native' || settings.controlMode === 'both';
     const hasNative = isNativeAnchor(binding) && binding.controls.isConnected;
     const canNative = hasNative;
-    const wantsFloating = settings.controlMode !== 'native' || !canNative || !panel.hidden;
+    const wantsFloating = (settings.controlMode !== 'native' && !(settings.controlMode === 'both' && canNative && nativeReplacesFloating(binding.adapter)))
+      || !canNative || !panel.hidden;
     // Reconcile the two hosts independently. A provider rebuilding its toolbar
     // must not detach the focused/open floating panel or replace its children.
     if (wantsFloating) {
@@ -781,7 +793,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     if (wantsNative && hasNative && isNativeAnchor(binding)) {
       const isDisney = binding.adapter === 'Disney+';
       const isNetflix = binding.adapter === 'Netflix';
-      const siteClass = isDisney ? 'is-disney ' : isNetflix ? 'is-netflix ' : binding.adapter === 'Prime Video' ? 'is-prime ' : binding.adapter === 'YouTube' ? 'is-youtube ' : '';
+      const siteClass = isDisney ? 'is-disney ' : isNetflix ? 'is-netflix ' : binding.adapter === 'Prime Video' ? 'is-prime ' : binding.adapter === 'YouTube' ? 'is-youtube ' : binding.adapter === 'Stremio' ? 'is-stremio ' : '';
       const className = `jz-controls-host native-host ${siteClass}${binding.controlClassName ?? ''}`;
       if (nativeHost.className !== className) nativeHost.className = className;
       // YouTube's control bar treats a mouseover/mouseout target as "still on the
@@ -901,6 +913,27 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
           const iconSize = Math.max(18, Math.min(32, Math.round(w * 0.66)));
           nativeHost.style.setProperty('--jz-icon-size', `${iconSize}px`);
           nativeButton.style.color = '#fff';
+        } else if (binding.adapter === 'Stremio') {
+          // Stremio's own classes on the host already give the 4rem box, radius
+          // and hover overlay; pin the measured box so a missing rule can't
+          // collapse it, and draw the icon at the neighbours' glyph size/colour.
+          const w = Math.max(32, Math.min(72, Math.round(width || 56)));
+          const h = Math.max(32, Math.min(72, Math.round(height || 56)));
+          nativeHost.style.display = 'flex';
+          nativeHost.style.flex = '0 0 auto';
+          nativeHost.style.alignItems = 'center';
+          nativeHost.style.justifyContent = 'center';
+          nativeHost.style.width = `${w}px`;
+          nativeHost.style.height = `${h}px`;
+          // Stremio draws the focus ring on the focused element; the host also
+          // matches :focus while its shadow button is focused, so keep one ring.
+          nativeHost.style.outline = 'none';
+          nativeHost.style.pointerEvents = 'auto';
+          const glyph = anchor.querySelector('svg')?.getBoundingClientRect().width || Math.round(w * 0.55);
+          // Stremio's filled 512-unit glyphs fill their box more than our stroked chevrons.
+          nativeHost.style.setProperty('--jz-icon-size', `${Math.max(18, Math.min(36, Math.round(glyph * 0.85)))}px`);
+          const iconColor = anchor.querySelector('svg') ? getComputedStyle(anchor.querySelector('svg')!).color : anchorCs.color;
+          nativeButton.style.color = iconColor && iconColor !== 'rgba(0, 0, 0, 0)' ? iconColor : 'rgba(255, 255, 255, 0.9)';
         } else {
           if (width > 0 && height > 0) {
             const properties = { display: 'inline-flex', position: 'relative', flex: '0 0 auto', 'align-items': 'center', 'justify-content': 'center', 'vertical-align': 'middle', width: `${width}px`, height: `${height}px`, 'min-width': `${width}px`, 'pointer-events': 'auto' };
@@ -947,7 +980,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     const label = adapter === 'Disney+' ? (active ? i18n.t('controls_reset_zoom') : i18n.t('controls_zoom')) : i18n.t('controls_toggle_zoom');
     if (nativeButton.getAttribute('aria-label') !== label) nativeButton.setAttribute('aria-label', label);
     const ownTooltip = adapter === 'Disney+' || adapter === 'Prime Video' || adapter === 'YouTube';
-    if (ownTooltip || adapter === 'Netflix') {
+    if (ownTooltip || adapter === 'Netflix' || adapter === 'Stremio') {
       if (nativeButton.hasAttribute('title')) nativeButton.removeAttribute('title');
     } else if (nativeButton.title !== label) {
       nativeButton.title = label;
@@ -1093,7 +1126,8 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       const hasNative = isNativeAnchor(binding) && binding.controls.isConnected;
       const canNative = hasNative;
       const wantsNative = (nextSettings.controlMode === 'native' || nextSettings.controlMode === 'both') && canNative;
-      const wantsFloating = nextSettings.controlMode !== 'native' || !canNative || !panel.hidden;
+      const wantsFloating = (nextSettings.controlMode !== 'native' && !(nextSettings.controlMode === 'both' && canNative && nativeReplacesFloating(binding.adapter)))
+        || !canNative || !panel.hidden;
       const needsMount = !prevSettings || prevEnabled !== true
         || prevSettings.controlMode !== nextSettings.controlMode
         || nativeHost.isConnected !== wantsNative

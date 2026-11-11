@@ -16,6 +16,10 @@ export const services: AdapterSpec[] = [
   { name: 'Vimeo', host: /(^|\.)vimeo\.com$/, player: '.vp-video-wrapper,.player,[data-player]', fullscreen: 'button[data-fullscreen-button],button[aria-label*="fullscreen" i],button[aria-label*="full screen" i]' },
   { name: 'Crunchyroll', host: /(^|\.)crunchyroll\.com$/, player: '[data-testid="video-player"],[class*="video-player"]', fullscreen: 'button[data-testid="fullscreen-button"]' },
   { name: 'Plex Web', host: /(^|\.)plex\.tv$/, player: '[class*="PlayerContainer"],[class*="VideoPlayer"]', fullscreen: 'button[data-testid*="fullscreen" i],button[aria-label*="fullscreen" i],button[class*="fullscreen" i]' },
+  // Stremio has no fullscreen button in its bottom bar (it lives in the top nav),
+  // so the anchor is the last icon of the bar's right group (its options button).
+  // CSS-module hashes change per build; match the stable class prefixes only.
+  { name: 'Stremio', host: /(^|\.)web\.stremio\.com$/, player: '[class*="video-container"] > div', fullscreen: '[class*="control-bar-buttons-menu-container"] > :is([class^="control-bar-button-"],[class*=" control-bar-button-"]):last-child' },
   { name: 'DAZN', host: /(^|\.)dazn\.com$/, player: '[data-test-id="video-player"],[class*="video-player"]', fullscreen: 'button[data-test-id*="fullscreen" i],button[data-test-id*="full-screen" i],button[aria-label*="fullscreen" i]' },
 ];
 export const genericPlayer = '.video-js,.jwplayer,.plyr,.shaka-video-container,[data-player]';
@@ -231,7 +235,7 @@ export function createDisneyPointerExclusion(host: HTMLElement, activate: () => 
 }
 
 function insertionPoint(anchor: HTMLElement, service?: string): { controls: HTMLElement; before: HTMLElement } | null {
-  if (service === 'Disney+') {
+  if (service === 'Disney+' || service === 'Stremio') {
     const controls = anchor.parentElement;
     return controls && controls !== document.body && controls !== document.documentElement ? { controls, before: anchor } : null;
   }
@@ -257,7 +261,20 @@ function shareableClasses(className?: string): string | undefined {
   return className.split(/\s+/).filter(token => token && !/full-?screen/i.test(token)).join(' ');
 }
 
-export const TESTED_SERVICES = ['YouTube', 'Netflix', 'Prime Video', 'Disney+'] as const;
+export const TESTED_SERVICES = ['YouTube', 'Netflix', 'Prime Video', 'Disney+', 'Stremio'] as const;
+
+// Services whose generic floating trigger collides with page UI (Stremio's
+// right-edge side-drawer handle): once the bar button is mounted, it replaces
+// the floating trigger unless the user explicitly chose floating-only.
+export function nativeReplacesFloating(adapter?: string): boolean {
+  return adapter === 'Stremio';
+}
+
+// Stremio's look comes from its two CSS-module base classes (size, radius,
+// hover overlay, focus outline); never borrow per-button identity classes.
+function stremioClasses(className?: string): string | undefined {
+  return className?.split(/\s+/).filter(token => /^(control-bar-button|button-container)-/.test(token)).join(' ');
+}
 export type TestedService = (typeof TESTED_SERVICES)[number];
 
 export function isTestedService(name?: string): boolean {
@@ -300,6 +317,7 @@ export function bindPlayer(video: HTMLVideoElement, previous?: PlayerBinding): P
     controlClassName: shareableClasses(service?.name === 'Netflix' ? point?.before.className
       : service?.name === 'Disney+' ? 'control'
       : service?.name === 'Prime Video' ? point?.before.className || anchor?.className
+      : service?.name === 'Stremio' ? stremioClasses(anchor?.className)
       : anchor?.className),
     adapter: service?.name ?? (isNative ? 'Native HTML5' : 'Generic HTML5'),
   };
