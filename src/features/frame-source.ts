@@ -221,7 +221,7 @@ export class FrameSource {
       }
       const decodeStart = performance.now(), dataChars = dataUrl.length;
       const blob = await (await fetch(dataUrl)).blob();
-      dataUrl = undefined; // drop the shot's only reference before the full-size decode
+      dataUrl = response.dataUrl = undefined; // drop every reference to the shot before the full-size decode
       // One decode here; the existing drawImage below does the downscale. bitmap.close() runs in finally.
       const bitmap = await createImageBitmap(blob);
       if (DEBUG) debugState({ protectedSample: { shot: `${bitmap.width}x${bitmap.height}`, dataChars, jpegBytes: blob.size, decodeMs: Math.round((performance.now() - decodeStart) * 10) / 10 } });
