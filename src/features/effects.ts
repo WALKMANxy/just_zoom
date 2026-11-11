@@ -81,7 +81,8 @@ export class EffectsController {
         ? { source: 'unavailable', message: i18n.t('status_ambience_fullscreen') }
         : { source: 'idle', message: '' }); return;
     }
-    if (document.hidden || !this.intersection || !this.binding.video.isConnected) return;
+    // Out of sight: finish any low-rate morph now instead of animating unseen.
+    if (document.hidden || !this.intersection || !this.binding.video.isConnected) { this.ambience.settle(); return; }
     if (this.binding.video.paused && this.staticDone) return;
     const generation = this.generation;
     this.busy = true;
@@ -102,7 +103,7 @@ export class EffectsController {
           this.lastDetection = now;
           const accepted = this.tracker.observe(detectBorders(sample.pixels), now); if (accepted) this.target = accepted;
         }
-        if (this.settings.ambience !== 'off') this.ambience.render(sample.canvas, sample.canvas.width, sample.canvas.height, sample.source === 'direct' ? this.crop : EMPTY_CROP, now);
+        if (this.settings.ambience !== 'off') this.ambience.render(sample.canvas, sample.canvas.width, sample.canvas.height, sample.source === 'direct' ? this.crop : EMPTY_CROP, now, sample.source === 'compatibility');
       }
       // The transform engine owns visual interpolation. Do not ease the same
       // crop again here: that would freeze partway when screenshot sampling
