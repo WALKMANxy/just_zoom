@@ -3,8 +3,6 @@ import { clearStoredSettings, isSettingsClearedError, loadFullStore, loadSetting
 import type { RuntimeSnapshot } from '../src/shared/types';
 import { DEBUG } from '../src/shared/debug';
 
-interface CaptureRequest { x: number; y: number; width: number; height: number; viewportW: number; viewportH: number; outW: number; outH: number }
-
 export default defineBackground(() => {
   const frames = new Map<number, Map<number, { score: number; updated: number }>>();
   let storeQueue = Promise.resolve();
@@ -43,57 +41,6 @@ export default defineBackground(() => {
       // Tab is not yet ready, restricted, or has no content script running
     }
     return null;
-  }
-
-  /** Validated JZ_CAPTURE geometry: crop in viewport CSS px, output size in device px (≤ 256). */
-  function captureRequest(message: { crop?: unknown; viewport?: unknown; size?: unknown }): CaptureRequest | null {
-    const num = (value: unknown, min: number, max: number) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
-    const crop = message.crop as Record<string, unknown> | undefined, viewport = message.viewport as Record<string, unknown> | undefined, size = message.size as Record<string, unknown> | undefined;
-    if (!crop || !viewport || !size || !num(viewport.w, 1, 100000) || !num(viewport.h, 1, 100000)) return null;
-    if (!num(size.w, 1, 256) || !num(size.h, 1, 256) || !Number.isInteger(size.w) || !Number.isInteger(size.h)) return null;
-    if (!num(crop.x, 0, 100000) || !num(crop.y, 0, 100000) || !num(crop.width, 1, 100000) || !num(crop.height, 1, 100000)) return null;
-    return { x: crop.x as number, y: crop.y as number, width: crop.width as number, height: crop.height as number,
-      viewportW: viewport.w as number, viewportH: viewport.h as number, outW: size.w as number, outH: size.h as number };
-  }
-
-  /** JPEG pixel size from its SOF marker, so decode can crop + resize in one step. */
-  async function jpegSize(blob: Blob): Promise<{ w: number; h: number } | null> {
-    const b = new Uint8Array(await blob.slice(0, 65536).arrayBuffer());
-    for (let i = 2; i + 9 < b.length;) {
-      if (b[i] !== 0xff) return null;
-      const marker = b[i + 1]!, length = (b[i + 2]! << 8) | b[i + 3]!;
-      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
-        return { h: (b[i + 5]! << 8) | b[i + 6]!, w: (b[i + 7]! << 8) | b[i + 8]! };
-      i += 2 + length;
-    }
-    return null;
-  }
-
-  /**
-   * Crop the screenshot to the picture and shrink it to the requested sample size inside the
-   * worker, returning a few-KB JPEG data URL. Every intermediate is closed or dropped here;
-   * nothing is cached, stored or written to disk.
-   */
-  async function shrinkCapture(blob: Blob, request: CaptureRequest): Promise<{ dataUrl: string; shot: string; sampleBytes: number }> {
-    let size = await jpegSize(blob), full: ImageBitmap | null = null, small: ImageBitmap | null = null;
-    try {
-      if (!size) { full = await createImageBitmap(blob); size = { w: full.width, h: full.height }; }
-      const sx = size.w / request.viewportW, sy = size.h / request.viewportH;
-      const x = Math.max(0, Math.floor(request.x * sx)), y = Math.max(0, Math.floor(request.y * sy));
-      const w = Math.min(size.w - x, Math.ceil(request.width * sx)), h = Math.min(size.h - y, Math.ceil(request.height * sy));
-      if (w < 1 || h < 1) throw new Error('Capture rect outside screenshot');
-      const options: ImageBitmapOptions = { resizeWidth: request.outW, resizeHeight: request.outH, resizeQuality: 'low' };
-      small = await createImageBitmap(full ?? blob, x, y, w, h, options);
-      full?.close(); full = null;
-      const canvas = new OffscreenCanvas(request.outW, request.outH);
-      canvas.getContext('2d')!.drawImage(small, 0, 0);
-      // A 192x108 JPEG is ~2-4 KB at .75; raw RGBA would be ~110 KB as base64.
-      const out = await canvas.convertToBlob({ type: 'image/jpeg', quality: .75 });
-      canvas.width = canvas.height = 0;
-      const bytes = new Uint8Array(await out.arrayBuffer());
-      let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-      return { dataUrl: `data:image/jpeg;base64,${btoa(binary)}`, shot: `${size.w}x${size.h}`, sampleBytes: bytes.length };
-    } finally { full?.close(); small?.close(); }
   }
 
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
@@ -195,8 +142,6 @@ export default defineBackground(() => {
       void (async () => {
         if (!sender.tab?.id || sender.frameId !== 0 || sender.id !== chrome.runtime.id) throw new Error('Screenshot sampling is available only in the top page');
         if (typeof message.requestId !== 'string' || message.requestId.length > 100) throw new Error('Invalid capture request');
-        const request = captureRequest(message);
-        if (!request) throw new Error('Invalid capture request');
         if (captureBusy || Date.now() - lastCapture < 700) throw new Error('Capture busy');
         captureBusy = true; lastCapture = Date.now();
         try {
@@ -204,19 +149,15 @@ export default defineBackground(() => {
           const before = await chrome.tabs.get(tabId);
           const win = await chrome.windows.get(before.windowId);
           if (!before.active || !win.focused || before.url !== sender.tab.url) throw new Error('Video tab is not focused');
-          // Only colour survives the 192x108 blur / 4x3 field. Measured offline (same libjpeg quality
-          // scale): q10 stays within ~6/255 of lossless on the 4x3 field, q<=5 drifts up to 17/255
-          // and saves almost no bytes. Decode cost depends on pixel count, not quality. Never PNG.
-          let shot: string | null = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 10 });
-          const started = performance.now();
+          // Only colour survives the 192x108 blur / 4x3 colour field. Measured offline (libjpeg quality
+          // scale, 3441x1380): q10 stays within ~6/255 of lossless after blur; q<=5 drifts up to 17/255
+          // for almost no byte saving. Lower quality shrinks encode, base64 transfer and decode. Never PNG.
+          // The data URL is passed straight to respond(); nothing here keeps a reference to it.
+          const dataUrl = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 10 });
           const [active] = await chrome.tabs.query({ active: true, windowId: before.windowId });
           const afterWin = await chrome.windows.get(before.windowId);
           if (active?.id !== tabId || active.url !== before.url || !afterWin.focused) throw new Error('Tab changed during capture');
-          const shotBytes = shot.length;
-          const blob = await (await fetch(shot)).blob();
-          shot = null; // drop the multi-megapixel data URL before decoding
-          const sample = await shrinkCapture(blob, request);
-          return { ok: true, requestId: message.requestId, ...sample, shotBytes, shrinkMs: Math.round((performance.now() - started) * 10) / 10 };
+          return { ok: true, dataUrl, requestId: message.requestId };
         } finally { captureBusy = false; }
       })().then(respond).catch(error => respond({ ok: false, error: error instanceof Error ? error.message : 'Capture unavailable' }));
       return true;

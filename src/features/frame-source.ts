@@ -13,9 +13,6 @@ const compatibilityEnabled = (settings: Settings) => COMPATIBILITY_CAPTURE_AVAIL
 // Ambience then uses a low-rate screenshot cropped to the video; the worker also throttles at 700 ms.
 const PROTECTED_INTERVAL: Record<Settings['ambienceRate'], number> = { performance: 1500, high: 1000, quality: 750 };
 const PROTECTED_BLACK_PROBES = 2;
-// Ambience asks for 192 (32 for colour) and renders into a 192x108 stage; the worker caps at 256.
-const PROTECTED_MAX_SIDE = 256;
-const PROTECTED_MAX_SAMPLE_CHARS = 200_000;
 const RETRYABLE_CAPTURE = ['Video tab is not focused', 'Capture busy', 'Tab changed during capture'];
 const sameRect = (a: DOMRect, b: DOMRect) => ['x', 'y', 'width', 'height'].every(key => Math.abs(a[key as keyof DOMRect] as number - (b[key as keyof DOMRect] as number)) < 1);
 
@@ -80,7 +77,6 @@ export class FrameSource {
       }
     }
     // Compatibility capture doesn't work for DRM; logic gate activation commented out for now.
-    // If revived: JZ_CAPTURE now needs crop/viewport/size and returns an already-cropped sample (see sampleProtected).
     /*
     if (!settings.compatibility) { this.status({ source: 'unavailable', message: 'Video pixels unavailable. Manual framing still works.' }); return null; }
     if (window.top !== window) { this.status({ source: 'unavailable', message: 'Compatibility sampling is limited to top-level players.' }); return null; }
@@ -213,27 +209,22 @@ export class FrameSource {
     const rect = this.visibleVideoRect();
     if (!rect) return null;
     const generation = this.generation, requestId = crypto.randomUUID(), viewportW = innerWidth, viewportH = innerHeight;
-    // Ambience stretches any source into its 192x108 stage, so sample at exactly that 16:9 grid
-    // (192x108 blur, 32x18 colour) and let the worker squash the picture rect into it.
-    width = Math.max(8, Math.min(PROTECTED_MAX_SIDE, Math.round(width)));
-    const height = Math.max(1, Math.round(width * 108 / 192));
     try {
-      // The worker crops to `rect` and shrinks to width x height, so only a few-KB sample crosses IPC.
-      const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId,
-        crop: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, viewport: { w: viewportW, h: viewportH }, size: { w: width, h: height } },
-      ) as { ok: boolean; dataUrl?: string; requestId?: string; error?: string; shot?: string; shotBytes?: number; sampleBytes?: number; shrinkMs?: number };
+      const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId }) as { ok: boolean; dataUrl?: string; requestId?: string; error?: string };
       if (generation !== this.generation) return null;
       let dataUrl = response?.dataUrl;
-      // Accept only the worker's small in-memory JPEG data URL, never a network URL.
-      if (!response?.ok || response.requestId !== requestId || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg;base64,') || dataUrl.length > PROTECTED_MAX_SAMPLE_CHARS) {
+      // Accept only the worker's in-memory JPEG data URL, never a network URL.
+      if (!response?.ok || response.requestId !== requestId || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg;base64,')) {
         // Focus moved mid-capture or another tab holds the worker throttle: hold, retry next interval.
         if (RETRYABLE_CAPTURE.includes(response?.error ?? '')) { this.status({ source: 'compatibility', message: i18n.t('status_protected_hold') }); return null; }
         throw new Error(response?.error || 'Capture unavailable');
       }
-      if (DEBUG) debugState({ protectedSample: { size: `${width}x${height}`, sampleChars: dataUrl.length, sampleBytes: response.sampleBytes, shot: response.shot, shotChars: response.shotBytes, workerMs: response.shrinkMs } });
+      const decodeStart = performance.now(), dataChars = dataUrl.length;
       const blob = await (await fetch(dataUrl)).blob();
-      dataUrl = undefined;
+      dataUrl = undefined; // drop the shot's only reference before the full-size decode
+      // One decode here; the existing drawImage below does the downscale. bitmap.close() runs in finally.
       const bitmap = await createImageBitmap(blob);
+      if (DEBUG) debugState({ protectedSample: { shot: `${bitmap.width}x${bitmap.height}`, dataChars, jpegBytes: blob.size, decodeMs: Math.round((performance.now() - decodeStart) * 10) / 10 } });
       try {
         // Geometry moved during capture (fullscreen, resize, scroll): the crop would sample the wrong area.
         if (generation !== this.generation || document.hidden || !video.isConnected || viewportW !== innerWidth || viewportH !== innerHeight) return null;
@@ -241,8 +232,10 @@ export class FrameSource {
         if (!after || !sameRect(rect, after)) return null;
         if (!this.visual) { this.visual = document.createElement('canvas'); this.visualCtx = this.visual.getContext('2d'); }
         if (!this.visualCtx) return null;
+        const height = Math.max(Math.round(width / 3), Math.min(width, Math.round(width * rect.height / rect.width)));
         if (this.visual.width !== width || this.visual.height !== height) { this.visual.width = width; this.visual.height = height; }
-        this.visualCtx.drawImage(bitmap, 0, 0, width, height);
+        const sx = bitmap.width / viewportW, sy = bitmap.height / viewportH;
+        this.visualCtx.drawImage(bitmap, rect.x * sx, rect.y * sy, rect.width * sx, rect.height * sy, 0, 0, width, height);
         this.failureCount = 0;
         this.status({ source: 'compatibility', message: i18n.t('status_protected_sampling') });
         return { canvas: this.visual, pixels: null, source: 'compatibility', detectorSafe: false };

@@ -91,20 +91,18 @@ async function decodeDataUrl(dataUrl: string): Promise<ImageBitmap> {
   return createImageBitmap(await (await fetch(dataUrl)).blob());
 }
 
-async function screenshot(video: HTMLVideoElement): Promise<{ video: Stats; note: string }> {
+async function screenshot(video: HTMLVideoElement): Promise<{ video: Stats; page: Stats; note: string }> {
   if (window.top !== window) throw new Error('captureVisibleTab probe runs in the top frame only');
   const rect = pictureRect(video), viewW = innerWidth, viewH = innerHeight;
-  const x = Math.max(0, rect.x), y = Math.max(0, rect.y), w = Math.min(viewW, rect.right) - x, h = Math.min(viewH, rect.bottom) - y;
-  if (w < 8 || h < 8) throw new Error('video rect not visible');
-  // Same path as Ambience: the worker crops and shrinks, so only a 64x36 sample comes back.
-  const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId: crypto.randomUUID(),
-    crop: { x, y, width: w, height: h }, viewport: { w: viewW, h: viewH }, size: { w: 64, h: 36 } },
-  ) as { ok: boolean; dataUrl?: string; error?: string; shot?: string; shotBytes?: number; sampleBytes?: number };
+  const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId: crypto.randomUUID() }) as { ok: boolean; dataUrl?: string; error?: string };
   if (!response?.ok || !response.dataUrl) throw new Error(response?.error ?? 'capture failed');
   const bitmap = await decodeDataUrl(response.dataUrl);
   try {
-    return { video: read2d(bitmap, 0, 0, bitmap.width, bitmap.height),
-      note: `shot ${response.shot} (${response.shotBytes} chars) -> sample ${response.sampleBytes} B, view ${viewW}x${viewH}, dpr ${devicePixelRatio}` };
+    const sx = bitmap.width / viewW, sy = bitmap.height / viewH;
+    const x = Math.max(0, rect.x), y = Math.max(0, rect.y), w = Math.min(viewW, rect.right) - x, h = Math.min(viewH, rect.bottom) - y;
+    if (w < 8 || h < 8) throw new Error('video rect not visible');
+    return { video: read2d(bitmap, x * sx, y * sy, w * sx, h * sy), page: read2d(bitmap, 0, 0, bitmap.width, bitmap.height),
+      note: `shot ${bitmap.width}x${bitmap.height}, view ${viewW}x${viewH}, dpr ${devicePixelRatio}` };
   } finally { bitmap.close(); }
 }
 
@@ -143,10 +141,12 @@ async function probe(): Promise<Record<string, unknown>> {
   });
   const gl = await timed(() => ({ stats: webgl(video) }));
   // Several spaced shots: a playing real video changes between shots, a frozen/black surface does not.
-  const shots: Result[] = [];
+  const shots: (Result & { page?: Stats })[] = [];
   for (let i = 0; i < 4; i++) {
     if (i) await sleep(800);
-    shots.push(await timed(async () => { const s = await screenshot(video); return { stats: s.video, note: s.note }; }));
+    let page: Stats | undefined;
+    const result = await timed(async () => { const s = await screenshot(video); page = s.page; return { stats: s.video, note: s.note }; });
+    shots.push(page ? { ...result, page } : result);
   }
   const okShots = shots.filter((s): s is Extract<Result, { ok: true }> => s.ok);
   const shotMotion = okShots.slice(1).map((s, i) => gridDiff(okShots[i]!.stats, s.stats));
