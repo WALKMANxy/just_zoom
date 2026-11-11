@@ -2,6 +2,7 @@ import { EMPTY_CROP, type Crop, type FeatureStatus, type PlayerBinding, type Set
 import { isContextInvalidationError, isContextValid, markContextInvalid } from '../shared/storage';
 import { COMPATIBILITY_CAPTURE_AVAILABLE } from '../shared/features';
 import { i18n } from '../shared/i18n';
+import { DEBUG, debugState } from '../shared/debug';
 
 export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData | null; source: 'direct' | 'compatibility'; detectorSafe: boolean }
 export interface SampleRequest { readPixels?: boolean; width?: number }
@@ -211,14 +212,19 @@ export class FrameSource {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId }) as { ok: boolean; dataUrl?: string; requestId?: string; error?: string };
       if (generation !== this.generation) return null;
-      const dataUrl = response?.dataUrl;
+      let dataUrl = response?.dataUrl;
       // Accept only the worker's in-memory JPEG data URL, never a network URL.
       if (!response?.ok || response.requestId !== requestId || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg;base64,')) {
         // Focus moved mid-capture or another tab holds the worker throttle: hold, retry next interval.
         if (RETRYABLE_CAPTURE.includes(response?.error ?? '')) { this.status({ source: 'compatibility', message: i18n.t('status_protected_hold') }); return null; }
         throw new Error(response?.error || 'Capture unavailable');
       }
-      const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+      const decodeStart = performance.now(), dataChars = dataUrl.length;
+      const blob = await (await fetch(dataUrl)).blob();
+      dataUrl = response.dataUrl = undefined; // drop every reference to the shot before the full-size decode
+      // One decode here; the existing drawImage below does the downscale. bitmap.close() runs in finally.
+      const bitmap = await createImageBitmap(blob);
+      if (DEBUG) debugState({ protectedSample: { shot: `${bitmap.width}x${bitmap.height}`, dataChars, jpegBytes: blob.size, decodeMs: Math.round((performance.now() - decodeStart) * 10) / 10 } });
       try {
         // Geometry moved during capture (fullscreen, resize, scroll): the crop would sample the wrong area.
         if (generation !== this.generation || document.hidden || !video.isConnected || viewportW !== innerWidth || viewportH !== innerHeight) return null;

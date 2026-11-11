@@ -149,7 +149,11 @@ export default defineBackground(() => {
           const before = await chrome.tabs.get(tabId);
           const win = await chrome.windows.get(before.windowId);
           if (!before.active || !win.focused || before.url !== sender.tab.url) throw new Error('Video tab is not focused');
-          const dataUrl = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 65 });
+          // Only colour survives the 192x108 blur / 4x3 colour field. Measured offline (libjpeg quality
+          // scale, 3441x1380): q10 stays within ~6/255 of lossless after blur; q<=5 drifts up to 17/255
+          // for almost no byte saving. Lower quality shrinks encode, base64 transfer and decode. Never PNG.
+          // The data URL is passed straight to respond(); nothing here keeps a reference to it.
+          const dataUrl = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 10 });
           const [active] = await chrome.tabs.query({ active: true, windowId: before.windowId });
           const afterWin = await chrome.windows.get(before.windowId);
           if (active?.id !== tabId || active.url !== before.url || !afterWin.focused) throw new Error('Tab changed during capture');
