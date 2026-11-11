@@ -1,6 +1,7 @@
 import { debugLog } from '../shared/debug';
 import type { PlayerBinding } from '../shared/types';
 import { cueControlsElement } from './cue-adapters';
+import { readCueRules, resolveCueValue, type CueRules } from './cue-style';
 
 // Chrome paints native text-track cues (`::cue`) inside the video box, so our
 // scale/translate also zooms the subtitles and Fill/zoom can push them off-screen.
@@ -35,6 +36,15 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   let bar: HTMLElement | null = null, barTimer = 0;
   const barMutations = new MutationObserver(() => onBarChange());
   const barResize = new ResizeObserver(() => onBarChange());
+  // The page's own ::cue rules, re-read on cuechange and <head> changes.
+  let pageStyle: HTMLStyleElement | null = null, cueRules: CueRules = { signature: '', decls: [] }, appliedCss = '';
+  const headObserver = new MutationObserver(() => { if (refreshStyle()) schedule(); });
+  const refreshStyle = () => {
+    const next = readCueRules(video);
+    if (next.signature === cueRules.signature) return false;
+    cueRules = next; appliedCss = '';
+    return true;
+  };
 
   const transformed = () => {
     const scale = video.style.getPropertyValue('scale').trim();
@@ -42,7 +52,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     return (scale !== '' && scale !== '1') || (translate !== '' && !/^0(px)?( 0(px)?)?$/.test(translate));
   };
 
-  const onCueChange = () => { try { render(); } catch (error) { debugLog('cueOverlay', String(error)); } };
+  const onCueChange = () => { try { if (refreshStyle()) schedule(); render(); } catch (error) { debugLog('cueOverlay', String(error)); } };
 
   const takeOver = (track: TextTrack) => {
     if (yielded.has(track)) return;
@@ -69,7 +79,8 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
 
   const releaseAll = () => {
     for (const track of [...owned.keys()]) release(track);
-    host?.remove(); host = box = null;
+    host?.remove(); host = box = pageStyle = null; appliedCss = '';
+    headObserver.disconnect();
     watchBar(null);
   };
 
@@ -121,7 +132,10 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
       style.textContent = STYLE;
       box = document.createElement('div');
       box.className = 'box';
-      shadow.append(style, box);
+      pageStyle = document.createElement('style');
+      shadow.append(style, pageStyle, box);
+      refreshStyle();
+      if (document.head) headObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
     }
     // A sibling right after the video paints above it but below later player
     // controls, and is inside whatever element the site fullscreens.
@@ -166,8 +180,16 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
     host.style.setProperty('top', `${r.top + oy}px`, 'important');
     host.style.setProperty('width', `${r.width}px`, 'important');
     host.style.setProperty('height', `${r.height}px`, 'important');
-    // Close to Chrome's default ::cue size, relative to the visible box.
-    box.style.fontSize = `${Math.max(12, r.height * 0.05)}px`;
+    // Chrome's default ::cue size is 5% of the video box; a page rule replaces it.
+    const fallback = Math.max(12, r.height * 0.05);
+    let fontSize = `${fallback}px`, css = '';
+    for (const [prop, value] of cueRules.decls) {
+      const resolved = resolveCueValue(value, r);
+      if (prop === 'font-size') fontSize = resolved.endsWith('%') ? `${fallback * Number.parseFloat(resolved) / 100}px` : resolved;
+      else css += `${prop}:${resolved}!important;`;
+    }
+    box.style.fontSize = fontSize;
+    if (css !== appliedCss && pageStyle) { appliedCss = css; pageStyle.textContent = css ? `.cue > span{${css}}` : ''; }
     box.style.bottom = `${Math.round(r.height * 0.05 + barOverlap(r))}px`;
   };
 
@@ -198,7 +220,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
         // The page or user turned it off: stop drawing, keep their choice.
         else if (track.mode === 'disabled' && owned.has(track)) release(track, false);
       }
-      if (!owned.size) { host?.remove(); host = box = null; watchBar(null); return; }
+      if (!owned.size) { host?.remove(); host = box = pageStyle = null; appliedCss = ''; headObserver.disconnect(); watchBar(null); return; }
       if (!host) needsRender = true;
       if (!mount()) { releaseAll(); return; }
       watchBar(cueControlsElement(video));
