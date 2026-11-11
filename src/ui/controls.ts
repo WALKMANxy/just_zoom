@@ -178,6 +178,10 @@ const STYLE = `
     z-index: 2147483646;
     pointer-events: none;
     contain: layout style;
+    /* The panel overflows this 34px box. Page-wide rules such as Stremio's
+       global overflow:hidden on divs outrank normal :host declarations, so
+       only !important (where the shadow scope wins) keeps the panel visible. */
+    overflow: visible !important;
   }
   .floating-surface {
     position: relative;
