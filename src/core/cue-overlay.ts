@@ -192,6 +192,8 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   const render = () => {
     if (!box) return;
     box.replaceChildren();
+    // A torn-down or failed source (readyState 0) paints no cues natively either.
+    if (video.readyState === HTMLMediaElement.HAVE_NOTHING) return;
     for (const track of owned.keys()) {
       for (const cue of Array.from(track.activeCues ?? [])) {
         const line = document.createElement('div'), span = document.createElement('span');
@@ -231,7 +233,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   const schedule = () => { if (!frame && !disposed) frame = requestAnimationFrame(sync); };
   const onRemoveTrack = (event: TrackEvent) => {
     if (event.track instanceof TextTrack) { owned.delete(event.track); event.track.removeEventListener('cuechange', onCueChange); }
-    schedule();
+    needsRender = true; schedule();
   };
 
   // A bare video's visible box depends on our inline scale/translate: re-position on writes.
@@ -239,7 +241,12 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   styleObserver.observe(video, { attributes: true, attributeFilter: ['style'] });
   const resizeObserver = new ResizeObserver(() => { if (host) schedule(); });
   resizeObserver.observe(getBinding().viewport);
-  tracks.addEventListener('change', schedule);
+  // Source swaps, failures and seeks can leave activeCues changed without a cuechange
+  // on the old track, so redraw from activeCues (empty clears the text).
+  const rerender = () => { needsRender = true; schedule(); };
+  const MEDIA_RESETS = ['emptied', 'loadstart', 'abort', 'error', 'seeking', 'seeked', 'ended'] as const;
+  for (const type of MEDIA_RESETS) video.addEventListener(type, rerender);
+  tracks.addEventListener('change', rerender);
   tracks.addEventListener('addtrack', schedule);
   tracks.addEventListener('removetrack', onRemoveTrack);
   document.addEventListener('fullscreenchange', schedule);
@@ -253,7 +260,8 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
       cancelAnimationFrame(frame); frame = 0;
       styleObserver.disconnect(); resizeObserver.disconnect();
       watchBar(null);
-      tracks.removeEventListener('change', schedule);
+      for (const type of MEDIA_RESETS) video.removeEventListener(type, rerender);
+      tracks.removeEventListener('change', rerender);
       tracks.removeEventListener('addtrack', schedule);
       tracks.removeEventListener('removetrack', onRemoveTrack);
       document.removeEventListener('fullscreenchange', schedule);
