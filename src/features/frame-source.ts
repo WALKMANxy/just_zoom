@@ -213,13 +213,15 @@ export class FrameSource {
     const rect = this.visibleVideoRect();
     if (!rect) return null;
     const generation = this.generation, requestId = crypto.randomUUID(), viewportW = innerWidth, viewportH = innerHeight;
+    // Ambience stretches any source into its 192x108 stage, so sample at exactly that 16:9 grid
+    // (192x108 blur, 32x18 colour) and let the worker squash the picture rect into it.
     width = Math.max(8, Math.min(PROTECTED_MAX_SIDE, Math.round(width)));
-    const height = Math.max(Math.round(width / 3), Math.min(width, Math.round(width * rect.height / rect.width)));
+    const height = Math.max(1, Math.round(width * 108 / 192));
     try {
       // The worker crops to `rect` and shrinks to width x height, so only a few-KB sample crosses IPC.
       const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId,
         crop: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, viewport: { w: viewportW, h: viewportH }, size: { w: width, h: height } },
-      ) as { ok: boolean; dataUrl?: string; requestId?: string; error?: string; shot?: string; shotBytes?: number; sampleBytes?: number };
+      ) as { ok: boolean; dataUrl?: string; requestId?: string; error?: string; shot?: string; shotBytes?: number; sampleBytes?: number; shrinkMs?: number };
       if (generation !== this.generation) return null;
       let dataUrl = response?.dataUrl;
       // Accept only the worker's small in-memory JPEG data URL, never a network URL.
@@ -228,7 +230,7 @@ export class FrameSource {
         if (RETRYABLE_CAPTURE.includes(response?.error ?? '')) { this.status({ source: 'compatibility', message: i18n.t('status_protected_hold') }); return null; }
         throw new Error(response?.error || 'Capture unavailable');
       }
-      if (DEBUG) debugState({ protectedSample: { size: `${width}x${height}`, sampleChars: dataUrl.length, sampleBytes: response.sampleBytes, shot: response.shot, shotChars: response.shotBytes } });
+      if (DEBUG) debugState({ protectedSample: { size: `${width}x${height}`, sampleChars: dataUrl.length, sampleBytes: response.sampleBytes, shot: response.shot, shotChars: response.shotBytes, workerMs: response.shrinkMs } });
       const blob = await (await fetch(dataUrl)).blob();
       dataUrl = undefined;
       const bitmap = await createImageBitmap(blob);

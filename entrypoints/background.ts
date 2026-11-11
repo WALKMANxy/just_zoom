@@ -87,7 +87,8 @@ export default defineBackground(() => {
       full?.close(); full = null;
       const canvas = new OffscreenCanvas(request.outW, request.outH);
       canvas.getContext('2d')!.drawImage(small, 0, 0);
-      const out = await canvas.convertToBlob({ type: 'image/jpeg', quality: .85 });
+      // A 192x108 JPEG is ~2-4 KB at .75; raw RGBA would be ~110 KB as base64.
+      const out = await canvas.convertToBlob({ type: 'image/jpeg', quality: .75 });
       canvas.width = canvas.height = 0;
       const bytes = new Uint8Array(await out.arrayBuffer());
       let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
@@ -203,15 +204,19 @@ export default defineBackground(() => {
           const before = await chrome.tabs.get(tabId);
           const win = await chrome.windows.get(before.windowId);
           if (!before.active || !win.focused || before.url !== sender.tab.url) throw new Error('Video tab is not focused');
-          // Low quality: the shot is only cropped and shrunk to a ~192px sample, never shown as is.
-          let shot: string | null = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 35 });
+          // Only colour survives the 192x108 blur / 4x3 field. Measured offline (same libjpeg quality
+          // scale): q10 stays within ~6/255 of lossless on the 4x3 field, q<=5 drifts up to 17/255
+          // and saves almost no bytes. Decode cost depends on pixel count, not quality. Never PNG.
+          let shot: string | null = await chrome.tabs.captureVisibleTab(before.windowId, { format: 'jpeg', quality: 10 });
+          const started = performance.now();
           const [active] = await chrome.tabs.query({ active: true, windowId: before.windowId });
           const afterWin = await chrome.windows.get(before.windowId);
           if (active?.id !== tabId || active.url !== before.url || !afterWin.focused) throw new Error('Tab changed during capture');
           const shotBytes = shot.length;
           const blob = await (await fetch(shot)).blob();
           shot = null; // drop the multi-megapixel data URL before decoding
-          return { ok: true, requestId: message.requestId, ...await shrinkCapture(blob, request), shotBytes };
+          const sample = await shrinkCapture(blob, request);
+          return { ok: true, requestId: message.requestId, ...sample, shotBytes, shrinkMs: Math.round((performance.now() - started) * 10) / 10 };
         } finally { captureBusy = false; }
       })().then(respond).catch(error => respond({ ok: false, error: error instanceof Error ? error.message : 'Capture unavailable' }));
       return true;
