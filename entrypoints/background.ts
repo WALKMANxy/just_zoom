@@ -49,6 +49,19 @@ export default defineBackground(() => {
     if (DEBUG && message.type === 'JZ_DEV_RELOAD' && sender.id === chrome.runtime.id) {
       respond({ ok: true }); setTimeout(() => chrome.runtime.reload(), 50); return;
     }
+    // Debug builds only: the DRM probe reads poster/artwork pixels through host permissions,
+    // because content-script fetches inherit the page's CORS restrictions.
+    if (DEBUG && message.type === 'JZ_DEV_FETCH_IMAGE' && sender.id === chrome.runtime.id && typeof message.url === 'string' && /^https?:/i.test(message.url)) {
+      void fetch(message.url, { credentials: 'omit' }).then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        if (blob.size > 4_000_000) throw new Error('image too large');
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return { ok: true, dataUrl: `data:${blob.type || 'image/jpeg'};base64,${btoa(binary)}` };
+      }).then(respond).catch(error => respond({ ok: false, error: String(error) }));
+      return true;
+    }
     if (message.type === 'JZ_OPEN_SETTINGS' && sender.id === chrome.runtime.id) {
       // Firefox/Safari MV2 bundles expose browserAction, not action; a missing API must
       // reach the tab fallback instead of throwing synchronously.

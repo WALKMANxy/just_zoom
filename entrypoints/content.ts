@@ -3,6 +3,7 @@ import { startRuntime } from '../src/core/runtime';
 import { isContextInvalidationError, markContextInvalid } from '../src/shared/storage';
 import { guardOrphanedContext } from '../src/core/context-lifecycle';
 import { installDebugChannel } from '../src/shared/debug';
+import { installDrmProbe } from '../src/features/drm-probe';
 
 export default defineContentScript({
   matches: ['<all_urls>'], allFrames: true, matchAboutBlank: true, runAt: 'document_idle',
@@ -24,6 +25,7 @@ export default defineContentScript({
     });
     const stopRuntime = startRuntime();
     const stopDebug = installDebugChannel();
-    dispose = () => { stopDebug(); stopRuntime(); };
+    const stopProbe = installDrmProbe();
+    dispose = () => { stopProbe(); stopDebug(); stopRuntime(); };
   },
 });

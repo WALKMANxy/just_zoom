@@ -7,6 +7,12 @@ export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData | null; s
 export interface SampleRequest { readPixels?: boolean; width?: number }
 const hasCrop = (crop: Crop) => Object.values(crop).some(value => value > .001);
 const compatibilityEnabled = (settings: Settings) => COMPATIBILITY_CAPTURE_AVAILABLE && settings.compatibility;
+// Protected (EME) video paints black into canvases and makes ImageBitmap/VideoFrame throw,
+// but Chrome's visible-tab screenshot holds the real picture (evidence: docs/drm-frame-source.md).
+// Ambience then uses a low-rate screenshot cropped to the video; the worker also throttles at 700 ms.
+const PROTECTED_INTERVAL: Record<Settings['ambienceRate'], number> = { performance: 1500, high: 1000, quality: 750 };
+const PROTECTED_BLACK_PROBES = 2;
+const RETRYABLE_CAPTURE = ['Video tab is not focused', 'Capture busy', 'Tab changed during capture'];
 const sameRect = (a: DOMRect, b: DOMRect) => ['x', 'y', 'width', 'height'].every(key => Math.abs(a[key as keyof DOMRect] as number - (b[key as keyof DOMRect] as number)) < 1);
 
 export class FrameSource {
@@ -23,6 +29,9 @@ export class FrameSource {
   private probe: HTMLCanvasElement | null = null;
   private probeCtx: CanvasRenderingContext2D | null = null;
   private lastProbe = -Infinity;
+  private protectedMode = false;
+  private protectedBlack = 0;
+  private nextCapture = 0;
   constructor(private readonly binding: PlayerBinding, private readonly status: (value: FeatureStatus) => void) {}
   invalidate(): void { this.generation++; }
   /** Direct pixels failed and no fallback can run; only a source/settings change can help. */
@@ -31,6 +40,7 @@ export class FrameSource {
     this.invalidate(); this.unreadable = false; this.lowInformation = 0; this.failureCount = 0; this.retryAt = 0;
     this.canvas.width = 192;
     this.lastProbe = -Infinity;
+    this.protectedMode = false; this.protectedBlack = 0; this.nextCapture = 0;
   }
   dispose(): void {
     this.invalidate(); this.canvas.width = 0; this.canvas.height = 0;
@@ -38,10 +48,14 @@ export class FrameSource {
     if (this.probe) this.probe.width = this.probe.height = 0;
     this.visual = this.probe = null; this.visualCtx = this.probeCtx = null;
   }
+  /** Time until a sample can yield a new frame; lets the consumer skip no-op ticks. */
+  nextSampleDelay(): number { return this.protectedMode ? Math.max(0, this.nextCapture - performance.now()) : 0; }
   async sample(settings: Settings, crop: Crop = EMPTY_CROP, request: SampleRequest = {}): Promise<Sample | null> {
     const video = this.binding.video;
     if (!this.ctx || document.hidden || !video.isConnected || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
-    if (request.readPixels === false) return this.sampleVisual(settings, request.width ?? 192);
+    if (request.readPixels === false) {
+      return this.protectedMode ? this.sampleProtected(settings, request.width ?? 192) : this.sampleVisual(settings, request.width ?? 192);
+    }
     const size = { w: 192, h: Math.max(64, Math.min(192, Math.round(192 * video.videoHeight / video.videoWidth))) };
     if (this.canvas.width !== size.w || this.canvas.height !== size.h) { this.canvas.width = size.w; this.canvas.height = size.h; }
     if (!this.unreadable) {
@@ -143,11 +157,20 @@ export class FrameSource {
       if (now - this.lastProbe >= 1000) {
         this.probeCtx.drawImage(this.visual, 0, 0, 16, 9);
         const pixels = this.probeCtx.getImageData(0, 0, 16, 9);
-        let bright = 0;
-        for (let i = 0; i < pixels.data.length; i += 4) if (Math.max(pixels.data[i]!, pixels.data[i + 1]!, pixels.data[i + 2]!) > 24) bright++;
+        let bright = 0, max = 0;
+        for (let i = 0; i < pixels.data.length; i += 4) {
+          const value = Math.max(pixels.data[i]!, pixels.data[i + 1]!, pixels.data[i + 2]!);
+          if (value > 24) bright++;
+          if (value > max) max = value;
+        }
         this.lowInformation = bright > 16 * 9 * .03 ? 0 : this.lowInformation + 1;
         this.lastProbe = now;
+        // EME output reads as exact black even on bright frames; real dark scenes keep some signal.
+        this.protectedBlack = video.mediaKeys && max <= 2 ? this.protectedBlack + 1 : 0;
+        if (this.protectedBlack >= PROTECTED_BLACK_PROBES) { this.enterProtected(); return null; }
       }
+      // Suspected protected output: don't paint a black backdrop while confirming.
+      if (this.protectedBlack > 0) return null;
       if (this.lowInformation >= 6 && compatibilityEnabled(settings)) {
         this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
         return null;
@@ -155,8 +178,71 @@ export class FrameSource {
       this.status({ source: 'direct', message: this.lowInformation >= 6 ? i18n.t('status_dark_pixels') : i18n.t('status_local_sampling') });
       return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: false };
     } catch {
-      this.unreadable = true;
       this.visual.width = width; this.probe.width = 16;
+      if (video.mediaKeys) { this.enterProtected(); return null; }
+      this.unreadable = true;
+      this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
+      return null;
+    }
+  }
+  private enterProtected(): void {
+    this.protectedMode = true; this.nextCapture = 0; this.failureCount = 0;
+    this.status({ source: 'compatibility', message: i18n.t('status_protected_sampling') });
+  }
+  /** Visible part of the video picture in viewport CSS pixels, or null when too small to sample. */
+  private visibleVideoRect(): DOMRect | null {
+    const rect = this.binding.video.getBoundingClientRect(), picture = this.pictureRect(rect) ?? rect;
+    const host = this.binding.viewport.getBoundingClientRect();
+    const left = Math.max(0, picture.left, host.left), top = Math.max(0, picture.top, host.top);
+    const right = Math.min(innerWidth, picture.right, host.right), bottom = Math.min(innerHeight, picture.bottom, host.bottom);
+    return right - left >= 24 && bottom - top >= 24 ? new DOMRect(left, top, right - left, bottom - top) : null;
+  }
+  private async sampleProtected(settings: Settings, width: number): Promise<Sample | null> {
+    const video = this.binding.video, now = performance.now();
+    if (window.top !== window) { this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') }); return null; }
+    if (now < this.nextCapture) return null;
+    this.nextCapture = now + PROTECTED_INTERVAL[settings.ambienceRate];
+    // The worker refuses unfocused windows; skip the round trip and keep the last backdrop.
+    if (!document.hasFocus()) { this.status({ source: 'compatibility', message: i18n.t('status_protected_hold') }); return null; }
+    if (!isContextValid()) { this.status({ source: 'unavailable', message: i18n.t('status_effects_unavailable') }); return null; }
+    const rect = this.visibleVideoRect();
+    if (!rect) return null;
+    const generation = this.generation, requestId = crypto.randomUUID(), viewportW = innerWidth, viewportH = innerHeight;
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'JZ_CAPTURE', requestId }) as { ok: boolean; dataUrl?: string; requestId?: string; error?: string };
+      if (generation !== this.generation) return null;
+      const dataUrl = response?.dataUrl;
+      // Accept only the worker's in-memory JPEG data URL, never a network URL.
+      if (!response?.ok || response.requestId !== requestId || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg;base64,')) {
+        // Focus moved mid-capture or another tab holds the worker throttle: hold, retry next interval.
+        if (RETRYABLE_CAPTURE.includes(response?.error ?? '')) { this.status({ source: 'compatibility', message: i18n.t('status_protected_hold') }); return null; }
+        throw new Error(response?.error || 'Capture unavailable');
+      }
+      const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+      try {
+        // Geometry moved during capture (fullscreen, resize, scroll): the crop would sample the wrong area.
+        if (generation !== this.generation || document.hidden || !video.isConnected || viewportW !== innerWidth || viewportH !== innerHeight) return null;
+        const after = this.visibleVideoRect();
+        if (!after || !sameRect(rect, after)) return null;
+        if (!this.visual) { this.visual = document.createElement('canvas'); this.visualCtx = this.visual.getContext('2d'); }
+        if (!this.visualCtx) return null;
+        const height = Math.max(Math.round(width / 3), Math.min(width, Math.round(width * rect.height / rect.width)));
+        if (this.visual.width !== width || this.visual.height !== height) { this.visual.width = width; this.visual.height = height; }
+        const sx = bitmap.width / viewportW, sy = bitmap.height / viewportH;
+        this.visualCtx.drawImage(bitmap, rect.x * sx, rect.y * sy, rect.width * sx, rect.height * sy, 0, 0, width, height);
+        this.failureCount = 0;
+        this.status({ source: 'compatibility', message: i18n.t('status_protected_sampling') });
+        return { canvas: this.visual, pixels: null, source: 'compatibility', detectorSafe: false };
+      } finally { bitmap.close(); }
+    } catch (error) {
+      if (generation !== this.generation) return null;
+      if (isContextInvalidationError(error) || !isContextValid()) {
+        markContextInvalid();
+        this.status({ source: 'unavailable', message: i18n.t('status_effects_unavailable') });
+        return null;
+      }
+      this.failureCount++;
+      this.nextCapture = performance.now() + (this.failureCount >= 3 ? 20000 : 3000);
       this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
       return null;
     }

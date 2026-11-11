@@ -308,6 +308,8 @@
   "status_ambience_container": "Ambience needs a separate player container.",
   "status_ambience_fullscreen": "Ambience needs a player container outside video-only fullscreen.",
   "status_effects_unavailable": "Advanced effects unavailable; manual framing still works.",
+  "status_protected_sampling": "Protected video: low-rate screenshot Ambience.",
+  "status_protected_hold": "Protected video: Ambience held while the window is unfocused.",
   "status_clear_in_progress": "Preferences are already being cleared.",
   "popup_status_loading": "Loading…",
   "popup_status_no_video": "No active video. Changes here save as global defaults."
