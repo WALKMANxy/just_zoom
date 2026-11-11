@@ -38,6 +38,7 @@ export const FRAMING_KEYS: (keyof Settings)[] = [
   'autoCrop',
   'ambience',
   'ambienceRate',
+  'ambienceFillBars',
 ];
 // Preferences a site may override. Everything outside framing and this list is
 // global-only; a site entry never shadows it.
@@ -90,6 +91,7 @@ export function normalizeSettings(value: Partial<Settings> | unknown, base: Sett
       : ambience === 'soft' || ambience === 'full' ? v.ambienceRenderer === 'p3' ? 'colour' : 'blur' : base.ambience,
     ambienceRate: ['performance', 'high', 'quality'].includes(rate ?? '') ? rate as Settings['ambienceRate']
       : rate === 'low' ? 'performance' : base.ambienceRate,
+    ambienceFillBars: typeof v.ambienceFillBars === 'boolean' ? v.ambienceFillBars : base.ambienceFillBars,
     compatibility: typeof v.compatibility === 'boolean' ? v.compatibility : base.compatibility,
     rememberSiteState: typeof v.rememberSiteState === 'boolean' ? v.rememberSiteState : base.rememberSiteState,
     videoFinderMode: v.videoFinderMode === 'bruteforce' ? 'bruteforce' : (v.videoFinderMode === 'treewalker' ? 'treewalker' : base.videoFinderMode),

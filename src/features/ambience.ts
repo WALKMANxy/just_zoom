@@ -9,6 +9,8 @@ export class AmbienceRenderer {
   private stageCtx: CanvasRenderingContext2D | null = null;
   private saved: { property: string; value: string; priority: string; written: string }[] = [];
   constructor(private readonly binding: PlayerBinding) {}
+  /** Last rendered backdrop, for consumers that repaint it elsewhere (bar fill). */
+  get backdrop(): HTMLCanvasElement | null { return this.lastFrame ? this.canvas : null; }
   get available(): boolean { return this.binding.viewport !== this.binding.video && document.fullscreenElement !== this.binding.video; }
   update(mode: Settings['ambience']): void {
     if (mode === 'off') { this.dispose(); return; }
