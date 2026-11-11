@@ -177,7 +177,8 @@ export class FrameSource {
         return null;
       }
       this.status({ source: 'direct', message: this.lowInformation >= 6 ? i18n.t('status_dark_pixels') : i18n.t('status_local_sampling') });
-      return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: false };
+      // The visual canvas holds the whole source frame, so bar detection may read it.
+      return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: true };
     } catch {
       this.visual.width = width; this.probe.width = 16;
       if (video.mediaKeys) { this.enterProtected(); return null; }
@@ -238,7 +239,9 @@ export class FrameSource {
         this.visualCtx.drawImage(bitmap, rect.x * sx, rect.y * sy, rect.width * sx, rect.height * sy, 0, 0, width, height);
         this.failureCount = 0;
         this.status({ source: 'compatibility', message: i18n.t('status_protected_sampling') });
-        return { canvas: this.visual, pixels: null, source: 'compatibility', detectorSafe: false };
+        // Only an unclipped, mappable picture represents the whole source frame for bar detection.
+        const picture = this.pictureRect(video.getBoundingClientRect());
+        return { canvas: this.visual, pixels: null, source: 'compatibility', detectorSafe: !!picture && sameRect(picture, rect) };
       } finally { bitmap.close(); }
     } catch (error) {
       if (generation !== this.generation) return null;

@@ -68,6 +68,7 @@ const zoomSlider = document.querySelector<HTMLInputElement>('#setting-zoom')!;
 const zoomVal = document.querySelector<HTMLElement>('#setting-zoom-val')!;
 const ambienceButtons = document.querySelectorAll<HTMLButtonElement>('#setting-ambience button');
 const ambienceRateButtons = document.querySelectorAll<HTMLButtonElement>('#setting-ambienceRate button');
+const ambienceFillBarsCheckbox = document.querySelector<HTMLInputElement>('#setting-ambienceFillBars')!;
 const settingsStatus = document.querySelector<HTMLElement>('#settings-status')!;
 const settingsSaveBtn = document.querySelector<HTMLButtonElement>('#settings-save-btn')!;
 const settingsResetBtn = document.querySelector<HTMLButtonElement>('#settings-reset-btn')!;
@@ -146,6 +147,7 @@ function updateMasterToggleUI(enabled: boolean) {
   zoomSlider.disabled = !enabled;
   ambienceButtons.forEach(button => { button.disabled = !enabled; });
   ambienceRateButtons.forEach(button => { button.disabled = !enabled; });
+  ambienceFillBarsCheckbox.disabled = !enabled;
   displayProfileSelect.disabled = !enabled;
   customRatioInput.disabled = !enabled;
   zoomPresetChips.forEach(chip => { chip.disabled = !enabled; });
@@ -218,6 +220,7 @@ function applySettingsToForm(settings: Settings) {
   updateZoomDisplay();
   setExclusiveButtons(ambienceButtons, settings.ambience);
   setExclusiveButtons(ambienceRateButtons, settings.ambienceRate);
+  ambienceFillBarsCheckbox.checked = settings.ambienceFillBars;
   videoFinderModeSelect.value = settings.videoFinderMode || 'treewalker';
   nativeHtml5WorkaroundCheckbox.checked = settings.nativeHtml5Workaround ?? true;
   if (nativePlayerSkinSelect) nativePlayerSkinSelect.value = settings.nativePlayerSkin || 'classic';
@@ -243,6 +246,7 @@ function readSettingsFromForm(): Settings {
     zoom: Number.parseFloat(zoomSlider.value) || 1.34,
     ambience: selectedButtonValue(ambienceButtons, 'blur') as Settings['ambience'],
     ambienceRate: selectedButtonValue(ambienceRateButtons, 'high') as Settings['ambienceRate'],
+    ambienceFillBars: ambienceFillBarsCheckbox.checked,
     videoFinderMode: (videoFinderModeSelect.value as 'treewalker' | 'bruteforce') || 'treewalker',
     nativeHtml5Workaround: nativeHtml5WorkaroundCheckbox.checked,
     nativePlayerSkin: (nativePlayerSkinSelect?.value as Settings['nativePlayerSkin']) || 'classic',
@@ -419,6 +423,12 @@ async function renderSavedSites() {
           const rateLabel = normalized.ambienceRate === 'performance' ? i18n.t('common_performance') : normalized.ambienceRate === 'quality' ? i18n.t('common_quality') : i18n.t('common_default');
           rateChip.textContent = `Rate: ${rateLabel}`;
           chips.push(rateChip);
+        }
+        if (data.ambienceFillBars) {
+          const fillChip = document.createElement('span');
+          fillChip.className = 'site-chip';
+          fillChip.textContent = i18n.t('controls_fill_bars');
+          chips.push(fillChip);
         }
       }
 

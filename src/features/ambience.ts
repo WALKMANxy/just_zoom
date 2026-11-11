@@ -31,7 +31,11 @@ export class AmbienceRenderer {
   private raf = 0;
   private gap = 1000;
   private lastSlow = 0;
+  /** Called after each low-rate morph frame so mirrors of the backdrop (bar fill) move with it. */
+  onFrame: (() => void) | null = null;
   constructor(private readonly binding: PlayerBinding) {}
+  /** Last rendered backdrop, for consumers that repaint it elsewhere (bar fill). */
+  get backdrop(): HTMLCanvasElement | null { return this.lastFrame ? this.canvas : null; }
   get available(): boolean { return this.binding.viewport !== this.binding.video && document.fullscreenElement !== this.binding.video; }
   update(mode: Settings['ambience']): void {
     if (mode === 'off') { this.dispose(); return; }
@@ -146,6 +150,7 @@ export class AmbienceRenderer {
     ctx.globalAlpha = 1; ctx.drawImage(this.from, 0, 0);
     ctx.globalAlpha = k; ctx.drawImage(this.next, 0, 0);
     ctx.globalAlpha = 1;
+    this.onFrame?.();
     debugCount('ambienceMorphFrame');
     if (t < 1) this.raf = requestAnimationFrame(this.step);
     else debugState({ ambienceMorph: 'settled' });
@@ -169,7 +174,7 @@ export class AmbienceRenderer {
   settle(): void {
     if (!this.raf) return;
     this.stopMorph();
-    if (this.ctx && this.next) { this.ctx.globalAlpha = 1; this.ctx.drawImage(this.next, 0, 0); }
+    if (this.ctx && this.next) { this.ctx.globalAlpha = 1; this.ctx.drawImage(this.next, 0, 0); this.onFrame?.(); }
     debugState({ ambienceMorph: 'settled' });
   }
   private stopMorph(): void { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }

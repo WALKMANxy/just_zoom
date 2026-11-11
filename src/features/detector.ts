@@ -2,7 +2,7 @@ import { EMPTY_CROP, type Crop } from '../shared/types';
 
 export interface Detection { crop: Crop; confidence: number }
 const edges = ['top', 'right', 'bottom', 'left'] as const;
-const distance = (a: Crop, b: Crop) => Math.max(...edges.map(edge => Math.abs(a[edge] - b[edge])));
+export const distance = (a: Crop, b: Crop) => Math.max(...edges.map(edge => Math.abs(a[edge] - b[edge])));
 
 /** Conservative border evidence: ambiguous dark scenes produce no observation. */
 export function detectBorders(image: ImageData): Detection | null {
@@ -75,6 +75,8 @@ export class CropTracker {
   private since = 0;
   private count = 0;
   private last = 0;
+  /** Longest gap between agreeing observations; low-rate screenshot sampling needs more than direct sampling. */
+  maxGap = 1400;
   get crop(): Crop { return { ...this.accepted }; }
   setCrop(crop: Crop): void { this.accepted = { ...crop }; this.clearCandidate(); }
   clearCandidate(): void { this.candidate = null; this.count = 0; this.last = 0; }
@@ -82,7 +84,7 @@ export class CropTracker {
   observe(observation: Detection | null, now: number): Crop | null {
     if (!observation || observation.confidence < .8) { this.clearCandidate(); return null; }
     if (distance(observation.crop, this.accepted) < .015) { this.clearCandidate(); return null; }
-    if (!this.candidate || distance(observation.crop, this.candidate) > .015 || now - this.last > 1400) {
+    if (!this.candidate || distance(observation.crop, this.candidate) > .015 || now - this.last > this.maxGap) {
       this.candidate = { ...observation.crop }; this.since = now; this.count = 0;
     }
     this.count++; this.last = now;

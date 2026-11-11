@@ -59,6 +59,8 @@
   "controls_rate_high_aria": "Default: update ambience every 75 milliseconds",
   "controls_rate_quality_aria": "Quality: update ambience every 40 milliseconds",
   "controls_rate_hint": "Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.",
+  "controls_fill_bars": "Fill black bars",
+  "controls_fill_bars_hint": "Paints Ambience into black bars baked into the video (letterbox or pillarbox). The picture itself is never covered.",
   "controls_gesture_tip": "Hold $1 + scroll to zoom, drag to pan",
   "controls_settings_button": "Extension settings…",
   "player_play": "Play",

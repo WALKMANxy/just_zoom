@@ -100,7 +100,7 @@ function slider(
   return wrap;
 }
 
-function check(label: string, key: 'enabled' | 'animations' | 'buttonUseLast' | 'autoCrop' | 'allowPortrait' | 'compatibility' | 'rememberSiteState', description?: string) {
+function check(label: string, key: 'enabled' | 'animations' | 'buttonUseLast' | 'autoCrop' | 'allowPortrait' | 'compatibility' | 'rememberSiteState' | 'ambienceFillBars', description?: string) {
   const wrap = node('label', '', 'check');
   const input = node('input');
   input.type = 'checkbox';
@@ -251,6 +251,9 @@ function render() {
     ambienceRate.querySelectorAll('button').forEach(item => { item.disabled = true; });
   }
   extras.append(ambienceRate, node('p', i18n.t('controls_rate_hint'), 'hint'));
+  const fillBars = check(i18n.t('controls_fill_bars'), 'ambienceFillBars');
+  if (s.ambience === 'off') fillBars.querySelector('input')!.disabled = true;
+  extras.append(fillBars, node('p', i18n.t('controls_fill_bars_hint'), 'hint'));
   const pixels = node('p', i18n.t('popup_local_pixels'), 'hint');
   pixels.id = 'local-pixels';
   extras.append(pixels, check(i18n.t('popup_allow_portrait'), 'allowPortrait'));
