@@ -92,35 +92,45 @@ const STYLE = `
   :host(.is-netflix) .native-button:active {
     transform: scale(1.15);
   }
-  .jz-disney-tooltip {
-    display: none;
+  :host(.is-prime) .native-button {
+    opacity: .85;
+    border-radius: 50%;
+    transition: opacity .25s ease-in-out, background-color .25s ease-in-out;
   }
-  :host(.is-disney) .jz-disney-tooltip {
+  :host(.is-prime:hover) .native-button,
+  :host(.is-prime) .native-button:focus-visible {
+    opacity: 1;
+    background: rgba(255, 255, 255, .1);
+  }
+  /* Mirrors of each provider's own bar tooltip (values measured live). */
+  .jz-tooltip { display: none; }
+  :host(.is-disney) .jz-tooltip,
+  :host(.is-prime) .jz-tooltip,
+  :host(.is-youtube) .jz-tooltip {
     position: absolute;
-    bottom: calc(100% + 14px);
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 7px 12px;
-    background: #000;
-    color: #fff;
-    border-radius: 4px;
-    font-family: Inspire, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 14px;
-    letter-spacing: normal;
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
     transition: opacity .15s ease, visibility .15s ease;
     z-index: 1000;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, .5);
   }
-  :host(.is-disney) .jz-disney-tooltip-arrow {
+  :host(.is-disney) .jz-tooltip {
+    bottom: calc(100% + 18px);
+    padding: 4px 8px;
+    background: #000;
+    color: rgb(249, 249, 249);
+    border-radius: 2px;
+    font: 700 13px/14px Inspire, sans-serif;
+    letter-spacing: 1.55px;
+    text-transform: uppercase;
+  }
+  :host(.is-disney) .jz-tooltip-arrow {
     position: absolute;
     bottom: -4px;
     left: 50%;
@@ -128,10 +138,24 @@ const STYLE = `
     height: 8px;
     background: #000;
     transform: translateX(-50%) rotate(45deg);
-    pointer-events: none;
   }
-  :host(.is-disney:hover:not([data-suppressed])) .jz-disney-tooltip,
-  :host(.is-disney) .native-button:focus-visible ~ .jz-disney-tooltip {
+  :host(.is-prime) .jz-tooltip {
+    top: calc(100% + 11px);
+    color: #fff;
+    font: 400 16.72px/1.2 "ATVWebPlayerSDK Amazon Ember", Helvetica, sans-serif;
+    text-shadow: 0 0 4px rgba(0, 0, 0, .6);
+  }
+  :host(.is-youtube) .jz-tooltip {
+    bottom: calc(100% + 22px);
+    padding: 5px 9px;
+    background: rgba(0, 0, 0, .3);
+    border-radius: 8px;
+    color: rgb(238, 238, 238);
+    font: 500 12.98px/15px "YouTube Noto", Roboto, Arial, Helvetica, sans-serif;
+  }
+  :host(:not(.is-disney)) .jz-tooltip-arrow { display: none; }
+  :host(:hover:not([data-suppressed])) .jz-tooltip,
+  :host .native-button:focus-visible ~ .jz-tooltip {
     opacity: 1;
     visibility: visible;
   }
@@ -303,7 +327,9 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   let binding = initialBinding;
   const nativeHost = document.createElement('div');
   nativeHost.className = 'jz-controls-host';
-  const nativeShadow = nativeHost.attachShadow({ mode: 'open' });
+  // delegatesFocus keeps the host and its inner button a single tab stop when a
+  // provider needs the host itself to look focusable (see YouTube below).
+  const nativeShadow = nativeHost.attachShadow({ mode: 'open', delegatesFocus: true });
   let pointerExclusion = initialBinding.adapter === 'Disney+' ? createDisneyPointerExclusion(nativeHost, handlers.activate) : null;
   let netflixSpacer: HTMLElement | null = null;
   const floatingHost = document.createElement('div');
@@ -320,19 +346,18 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
 
   const nativeButton = makeButton('', 'activate', 'native-button');
   nativeButton.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
-  nativeButton.title = i18n.t('controls_toggle_zoom');
   nativeButton.innerHTML = ICON_OPPOSING;
 
-  const disneyTooltip = document.createElement('div');
-  disneyTooltip.className = 'jz-disney-tooltip';
-  disneyTooltip.setAttribute('role', 'tooltip');
-  disneyTooltip.setAttribute('aria-hidden', 'true');
-  const disneyTooltipLabel = document.createElement('span');
-  disneyTooltipLabel.className = 'jz-disney-tooltip-label';
-  disneyTooltipLabel.textContent = i18n.t('controls_zoom');
-  const disneyTooltipArrow = document.createElement('span');
-  disneyTooltipArrow.className = 'jz-disney-tooltip-arrow';
-  disneyTooltip.append(disneyTooltipLabel, disneyTooltipArrow);
+  const siteTooltip = document.createElement('div');
+  siteTooltip.className = 'jz-tooltip';
+  siteTooltip.setAttribute('role', 'tooltip');
+  siteTooltip.setAttribute('aria-hidden', 'true');
+  const tooltipLabel = document.createElement('span');
+  tooltipLabel.className = 'jz-tooltip-label';
+  tooltipLabel.textContent = i18n.t('controls_zoom');
+  const tooltipArrow = document.createElement('span');
+  tooltipArrow.className = 'jz-tooltip-arrow';
+  siteTooltip.append(tooltipLabel, tooltipArrow);
 
   const floatingButton = makeButton('', 'toggle-controls', 'floating-button');
   floatingButton.setAttribute('aria-label', i18n.t('controls_open_controls'));
@@ -472,7 +497,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     gestureTip,
     settingsButton,
   );
-  nativeShadow.append(nativeButton, disneyTooltip);
+  nativeShadow.append(nativeButton, siteTooltip);
   floatingSurface.append(floatingButton, panel);
   floatingShadow.append(floatingSurface);
 
@@ -611,12 +636,12 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
   floatingSurface.addEventListener('pointerleave', onSurfaceLeave);
 
   const isolateEvents = (shadow: ShadowRoot, host: HTMLElement) => {
-    shadow.addEventListener('keydown', (event) => {
-      if ((event as KeyboardEvent).key !== 'Escape') return;
-      event.preventDefault();
-      closePanel(true);
-    });
     if (host === floatingHost) {
+      shadow.addEventListener('keydown', (event) => {
+        if ((event as KeyboardEvent).key !== 'Escape') return;
+        event.preventDefault();
+        closePanel(true);
+      });
       shadow.addEventListener('focusin', () => {
         cancelHide();
         setFloatingVisible(true);
@@ -630,7 +655,16 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     }
     // Bubble-phase isolation preserves each control's own target event handlers.
     for (const type of EVENT_TYPES) {
-      shadow.addEventListener(type, (event) => event.stopPropagation());
+      shadow.addEventListener(type, (event) => {
+        // A focused native-bar button must behave like the provider's own buttons:
+        // only the keys that activate it stay local, so player shortcuts (f, k,
+        // arrows, Escape) and the gesture modifier still reach the page.
+        if (host === nativeHost && (type === 'keydown' || type === 'keyup')) {
+          const key = (event as KeyboardEvent).key;
+          if (key !== 'Enter' && key !== ' ') return;
+        }
+        event.stopPropagation();
+      });
     }
   };
   isolateEvents(nativeShadow, nativeHost);
@@ -743,8 +777,18 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     if (wantsNative && hasNative && isNativeAnchor(binding)) {
       const isDisney = binding.adapter === 'Disney+';
       const isNetflix = binding.adapter === 'Netflix';
-      const className = `jz-controls-host native-host ${isDisney ? 'is-disney ' : ''}${isNetflix ? 'is-netflix ' : ''}${binding.controlClassName ?? ''}`;
+      const siteClass = isDisney ? 'is-disney ' : isNetflix ? 'is-netflix ' : binding.adapter === 'Prime Video' ? 'is-prime ' : binding.adapter === 'YouTube' ? 'is-youtube ' : '';
+      const className = `jz-controls-host native-host ${siteClass}${binding.controlClassName ?? ''}`;
       if (nativeHost.className !== className) nativeHost.className = className;
+      // YouTube's control bar treats a mouseover/mouseout target as "still on the
+      // controls" only if it or an ancestor is a focusable control (enabled
+      // button/link/input, or tabindex >= 0). Shadow retargeting hides our inner
+      // button, so without this the bar auto-hides as soon as the pointer enters.
+      if (binding.adapter === 'YouTube') {
+        if (nativeHost.getAttribute('tabindex') !== '0') nativeHost.setAttribute('tabindex', '0');
+      } else if (nativeHost.hasAttribute('tabindex')) {
+        nativeHost.removeAttribute('tabindex');
+      }
       const anchor = binding.controlAnchor ?? binding.controlBefore;
       const before = binding.controlBefore;
       if (anchor instanceof HTMLElement) {
@@ -753,22 +797,37 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
         const beforeCs = before instanceof HTMLElement ? getComputedStyle(before) : null;
         nativeHost.style.top = '';
         nativeHost.style.left = '';
+        if (binding.adapter !== 'Netflix' && nativeButton.style.width) {
+          nativeButton.style.width = nativeButton.style.height = nativeButton.style.margin = '';
+        }
 
         if (binding.adapter === 'Netflix') {
-          const w = Math.max(40, width || 44);
-          const h = Math.max(40, height || 44);
+          // Take the fullscreen wrapper's slot (52px around a 44px button) so the
+          // row keeps Netflix's rhythm, and draw the icon at the button's size.
+          const slot = before instanceof HTMLElement && before.offsetWidth > 0 ? before : anchor;
+          const w = Math.max(40, slot.offsetWidth || 52);
+          const h = Math.max(40, slot.offsetHeight || 52);
           nativeHost.style.display = 'inline-flex';
           nativeHost.style.position = 'relative';
-          nativeHost.style.top = '-3px';
-          nativeHost.style.left = '-3px';
           nativeHost.style.flex = '0 0 auto';
-          nativeHost.style.alignItems = 'center';
-          nativeHost.style.justifyContent = 'center';
+          nativeHost.style.alignItems = 'flex-start';
+          nativeHost.style.justifyContent = 'flex-start';
           nativeHost.style.alignSelf = 'center';
           nativeHost.style.verticalAlign = 'middle';
           nativeHost.style.width = `${w}px`;
           nativeHost.style.height = `${h}px`;
           nativeHost.style.padding = '0';
+          // Netflix pins its 44px button to the wrapper's top-left rather than
+          // centring it; mirror the anchor's offset so icon gaps and the hover
+          // scale origin match the neighbouring buttons. Use layout sizes and the
+          // rect centre: the anchor may be mid hover scale(1.3) when we remount.
+          const slotRect = slot.getBoundingClientRect(), anchorRect = anchor.getBoundingClientRect();
+          const bw = Math.min(w, width || 44), bh = Math.min(h, height || 44);
+          const dx = slot === anchor ? 0 : Math.max(0, Math.min(w - bw, Math.round(anchorRect.left + anchorRect.width / 2 - slotRect.left - bw / 2)));
+          const dy = slot === anchor ? 0 : Math.max(0, Math.min(h - bh, Math.round(anchorRect.top + anchorRect.height / 2 - slotRect.top - bh / 2)));
+          nativeButton.style.width = `${bw}px`;
+          nativeButton.style.height = `${bh}px`;
+          nativeButton.style.margin = `${dy}px 0 0 ${dx}px`;
           nativeHost.style.lineHeight = '0';
           if (beforeCs?.margin && beforeCs.margin !== '0px') {
             nativeHost.style.margin = beforeCs.margin;
@@ -778,7 +837,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
             nativeHost.style.margin = '0';
           }
           nativeHost.style.pointerEvents = 'auto';
-          nativeHost.style.setProperty('--jz-icon-size', '38px');
+          nativeHost.style.setProperty('--jz-icon-size', `${Math.max(24, bw)}px`);
           nativeButton.style.color = '#fff';
 
           if (!netflixSpacer) {
@@ -821,9 +880,9 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
           nativeHost.style.setProperty('--jz-icon-size', `${iconSize}px`);
           nativeButton.style.color = '#fff';
         } else if (binding.adapter === 'Disney+') {
-          // Compensate for Disney+ custom element bounds so button matches adjacent controls
-          const w = Math.max(24, Math.min(60, Math.round((width || 36) * 1.2)));
-          const h = Math.max(24, Math.min(60, Math.round((height || 36) * 1.2)));
+          // Neighbouring Disney controls share the fullscreen element's box exactly.
+          const w = Math.max(24, Math.min(60, Math.round(width || 32)));
+          const h = Math.max(24, Math.min(60, Math.round(height || 32)));
           nativeHost.style.display = 'inline-flex';
           nativeHost.style.position = 'relative';
           nativeHost.style.flex = '0 0 auto';
@@ -834,10 +893,10 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
           nativeHost.style.height = `${h}px`;
           if (anchorCs.margin && anchorCs.margin !== '0px') nativeHost.style.margin = anchorCs.margin;
           nativeHost.style.pointerEvents = 'auto';
-          const iconSize = Math.max(18, Math.min(32, Math.round(w * 0.55)));
+          // Keep the previously reviewed ~21px glyph inside the smaller box.
+          const iconSize = Math.max(18, Math.min(32, Math.round(w * 0.66)));
           nativeHost.style.setProperty('--jz-icon-size', `${iconSize}px`);
           nativeButton.style.color = '#fff';
-          nativeButton.removeAttribute('title');
         } else {
           if (width > 0 && height > 0) {
             const properties = { display: 'inline-flex', position: 'relative', flex: '0 0 auto', 'align-items': 'center', 'justify-content': 'center', 'vertical-align': 'middle', width: `${width}px`, height: `${height}px`, 'min-width': `${width}px`, 'pointer-events': 'auto' };
@@ -875,6 +934,23 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
     pointerExclusion?.sync(true);
   };
 
+  // Each provider labels its bar buttons differently: Disney+, Prime and YouTube
+  // draw their own tooltip (mirrored by ours), Netflix shows none, and generic
+  // players get the browser tooltip.
+  const syncNativeLabel = () => {
+    const active = Boolean(settings?.zoomApplied);
+    const adapter = binding.adapter;
+    const label = adapter === 'Disney+' ? (active ? i18n.t('controls_reset_zoom') : i18n.t('controls_zoom')) : i18n.t('controls_toggle_zoom');
+    if (nativeButton.getAttribute('aria-label') !== label) nativeButton.setAttribute('aria-label', label);
+    const ownTooltip = adapter === 'Disney+' || adapter === 'Prime Video' || adapter === 'YouTube';
+    if (ownTooltip || adapter === 'Netflix') {
+      if (nativeButton.hasAttribute('title')) nativeButton.removeAttribute('title');
+    } else if (nativeButton.title !== label) {
+      nativeButton.title = label;
+    }
+    if (ownTooltip && tooltipLabel.textContent !== label) tooltipLabel.textContent = label;
+  };
+
   const syncLabels = () => {
     const active = Boolean(settings?.zoomApplied);
     const icon = active ? ICON_FACING : ICON_OPPOSING;
@@ -883,15 +959,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       nativeButton.innerHTML = icon;
       activateButton.innerHTML = `${icon} <span>${i18n.t('controls_toggle_zoom')}</span>`;
     }
-    const isDisney = binding.adapter === 'Disney+';
-    const defaultTitle = isDisney ? (active ? i18n.t('controls_reset_zoom') : i18n.t('controls_zoom')) : i18n.t('controls_toggle_zoom');
-    nativeButton.setAttribute('aria-label', defaultTitle);
-    if (isDisney) {
-      nativeButton.removeAttribute('title');
-      disneyTooltipLabel.textContent = defaultTitle;
-    } else {
-      nativeButton.title = defaultTitle;
-    }
+    syncNativeLabel();
 
     activateButton.setAttribute('aria-label', i18n.t('controls_toggle_zoom'));
     activateButton.disabled = false;
@@ -1036,15 +1104,7 @@ export function createControls(initialBinding: PlayerBinding, handlers: Controls
       else {
         const title = status?.source === 'unavailable' ? status.message : '';
         if (activateButton.title !== title) activateButton.title = title;
-        const isDisney = binding.adapter === 'Disney+';
-        const active = Boolean(settings?.zoomApplied);
-        const defaultTitle = isDisney ? (active ? i18n.t('controls_reset_zoom') : i18n.t('controls_zoom')) : i18n.t('controls_toggle_zoom');
-        if (isDisney) {
-          nativeButton.removeAttribute('title');
-          disneyTooltipLabel.textContent = defaultTitle;
-        } else if (nativeButton.title !== defaultTitle) {
-          nativeButton.title = defaultTitle;
-        }
+        syncNativeLabel();
       }
     },
     rebind(next: PlayerBinding) {
