@@ -124,7 +124,9 @@ export class EffectsController {
       // (lifecycle/settings) or a source change gives sampling a reason to retry.
       if (!this.disposed && this.wanted() && !document.hidden && this.intersection && !(this.binding.video.paused && this.staticDone)
         && !this.source.isTerminal(this.settings)) {
-        this.timer = setTimeout(() => { this.timer = null; void this.tick(); }, this.binding.video.paused ? 1500 : this.settings.ambience !== 'off' ? AMBIENCE_INTERVAL[this.settings.ambienceRate] : 450);
+        const interval = this.binding.video.paused ? 1500 : this.settings.ambience !== 'off' ? AMBIENCE_INTERVAL[this.settings.ambienceRate] : 450;
+        // Protected screenshot sampling is rate-limited; skip no-op ticks until it can capture again.
+        this.timer = setTimeout(() => { this.timer = null; void this.tick(); }, Math.max(interval, this.source.nextSampleDelay()));
       }
     }
   }
