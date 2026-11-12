@@ -3,7 +3,7 @@ import { AmbienceRenderer } from './ambience';
 import { BarFill, hasBars } from './bar-fill';
 import { BarHistory, CropTracker, detectBorders, distance } from './detector';
 import { DEBUG, debugCount, debugState } from '../shared/debug';
-import { FrameSource, type Sample } from './frame-source';
+import { FrameSource, type Sample, type Strip, type StripRequest } from './frame-source';
 import { AUTO_CROP_AVAILABLE } from '../shared/features';
 import { i18n } from '../shared/i18n';
 
@@ -44,7 +44,16 @@ export class EffectsController {
   private barProtected = false;
   private barSafe = false;
   private lastRetract = '';
-  constructor(private readonly binding: PlayerBinding, private readonly onCrop: (crop: Crop) => void, private readonly onStatus: (status: FeatureStatus) => void) {
+  // Exact picture start per edge (fraction of picture depth), refined from full-resolution strips;
+  // 0 = no bar or not refined yet. `sentinel` = unfilled rows left on the protected path.
+  private exact: Crop = { ...EMPTY_CROP };
+  private sentinel: Crop = { ...EMPTY_CROP };
+  private barMode: 'off' | 'clip' | 'paint' = 'off';
+  private clipSent = false;
+  private sentinelLuma: Partial<Record<keyof Crop, number>> = {};
+  private stripsRead = 0;
+  constructor(private readonly binding: PlayerBinding, private readonly onCrop: (crop: Crop) => void, private readonly onStatus: (status: FeatureStatus) => void,
+    private readonly onBarClip: (clip: Crop) => void = () => {}) {
     this.sourceUrl = binding.video.currentSrc;
     this.source = new FrameSource(binding, status => this.report(status)); this.ambience = new AmbienceRenderer(binding);
     this.barFill = new BarFill(binding);
@@ -67,7 +76,7 @@ export class EffectsController {
     if (autoChanged) this.tracker.clearCandidate();
     this.ambience.update(settings.enabled ? settings.ambience : 'off');
     if (!settings.ambienceFillBars) this.resetBars();
-    this.syncBarFill();
+    this.applyFill();
     if (changed) this.wake();
   }
   setCrop(crop: Crop): void { this.crop = { ...crop }; this.target = { ...crop }; this.tracker.setCrop(crop); }
@@ -92,39 +101,79 @@ export class EffectsController {
   }
   private resetBars(): void {
     this.bars.reset(); this.barHistory.reset(); this.barFill.dispose();
+    this.exact = { ...EMPTY_CROP }; this.sentinel = { ...EMPTY_CROP }; this.sentinelLuma = {};
     if (this.barCanvas) this.barCanvas.width = this.barCanvas.height = 0;
     this.barCanvas = null; this.barCtx = null;
+    this.applyFill();
     this.debugBars();
   }
-  /**
-   * Fill region in source fractions. The detector keeps one boundary row (its last dark row).
-   * Direct frames show the real video under the fill, so the fill covers that row too. Protected
-   * screenshots include the fill itself, so the last two dark rows stay unfilled as a seam: picture
-   * appearing there is the only way a screenshot can show bars shrinking (IMAX opening up, a new
-   * clip). Two rows, because the screenshot crop can land one sample row off between captures.
-   */
-  private barRegion(): Crop {
-    const crop = this.bars.crop;
-    if (!hasBars(crop)) return crop;
-    const { w, h } = this.barDepth;
-    if (this.barProtected) return {
-      top: Math.max(0, crop.top - 1 / h), bottom: Math.max(0, crop.bottom - 1 / h),
-      left: Math.max(0, crop.left - 1 / w), right: Math.max(0, crop.right - 1 / w),
-    };
-    return {
-      top: crop.top && crop.top + 1 / h, bottom: crop.bottom && crop.bottom + 1 / h,
-      left: crop.left && crop.left + 1 / w, right: crop.right && crop.right + 1 / w,
-    };
+  private pairs(crop: Crop): Crop {
+    // Show a pair only once both of its edges are refined.
+    const out = { ...EMPTY_CROP };
+    if (crop.top > 0 && crop.bottom > 0) { out.top = crop.top; out.bottom = crop.bottom; }
+    if (crop.left > 0 && crop.right > 0) { out.left = crop.left; out.right = crop.right; }
+    return out;
   }
-  private syncBarFill(): void {
-    if (!this.fillWanted()) { this.barFill.dispose(); return; }
-    this.barFill.setBars(this.barRegion());
+  /** Padding to keep out of the Ambience source: every refined bar row, sentinel included. */
+  private contentCrop(): Crop { return this.pairs(this.exact); }
+  /** What is clipped/painted: the refined bars minus the protected-path sentinel. */
+  private barRegion(): Crop {
+    const region = { ...EMPTY_CROP };
+    for (const edge of ['top', 'right', 'bottom', 'left'] as const) if (this.exact[edge] > 0) region[edge] = Math.max(1e-4, this.exact[edge] - this.sentinel[edge]);
+    return this.pairs(region);
+  }
+  /**
+   * Clipping the video lets the main backdrop show through the bars: one continuous Ambience at no
+   * draw cost. It needs nothing opaque between the video and the backdrop's host; otherwise a copy
+   * of the backdrop is painted over the bars with the same mapping.
+   */
+  private clipSafe(): boolean {
+    const { video, viewport } = this.binding;
+    const opaque = (el: Element) => {
+      const cs = getComputedStyle(el), alpha = /rgba\([^)]*,\s*([\d.]+)\)$/.exec(cs.backgroundColor);
+      return cs.backgroundImage !== 'none' || cs.backgroundColor !== 'transparent' && (!alpha || Number(alpha[1]) > .05);
+    };
+    if (opaque(video)) return false;
+    for (let el = video.parentElement; el !== viewport; el = el.parentElement) if (!el || opaque(el)) return false;
+    return true;
+  }
+  /** Native cues paint inside the video box (in the bottom bar), so neither fill mode may cover them. */
+  private nativeCuesShowing(): boolean {
+    return Array.from(this.binding.video.textTracks).some(track => track.mode === 'showing' && (track.kind === 'subtitles' || track.kind === 'captions'));
+  }
+  private applyFill(): void {
+    const region = this.barRegion();
+    const mode = !this.fillWanted() || !hasBars(region) || this.nativeCuesShowing() ? 'off' : this.clipSafe() ? 'clip' : 'paint';
+    this.barMode = mode;
+    if (mode === 'clip') { this.onBarClip(region); this.clipSent = true; }
+    else if (this.clipSent) { this.onBarClip({ ...EMPTY_CROP }); this.clipSent = false; }
+    if (mode === 'paint') this.barFill.setBars(region); else this.barFill.dispose();
+  }
+  /** True while the bars on screen (and in screenshots) show Ambience instead of the video. */
+  private fillShown(): boolean { return this.barMode === 'clip' || this.barMode === 'paint' && this.barFill.visible; }
+  /** Full-resolution bands around each coarse boundary; the coarse sample row is ~8-10 CSS px. */
+  private stripRequests(): StripRequest[] {
+    const coarse = hasBars(this.bars.crop) ? this.bars.crop : this.barHistory.diagnostics.reason === 'ok' ? this.lastObservation : EMPTY_CROP;
+    const out: StripRequest[] = [];
+    for (const edge of ['top', 'right', 'bottom', 'left'] as const) {
+      if (!(coarse[edge] > 0)) continue;
+      const step = 1 / (edge === 'top' || edge === 'bottom' ? this.barDepth.h : this.barDepth.w), end = coarse[edge] + step;
+      out.push({ edge, from: Math.max(0, end - 3 * step), to: Math.min(.36, end + 3 * step) });
+    }
+    return out;
+  }
+  private lastObservation: Crop = { ...EMPTY_CROP };
+  /** First row (outer → inner) where the picture starts, as a picture fraction; null if the band is all dark. */
+  private refineEdge(strip: Strip, dark: number): number | null {
+    const m = strip.medians;
+    for (let i = 1; i + 1 < m.length; i++) if (m[i]! > dark && m[i + 1]! > dark) return strip.from + i / strip.depth;
+    return null;
   }
   private detectBars(sample: Sample, now: number): void {
     this.barSafe = sample.detectorSafe;
     if (!sample.detectorSafe) return;
     const protectedFrame = sample.source === 'compatibility';
-    if (protectedFrame !== this.barProtected) { this.barProtected = protectedFrame; this.bars.clearCandidate(); this.barHistory.reset(); }
+    if (protectedFrame !== this.barProtected) { this.barProtected = protectedFrame; this.bars.clearCandidate(); this.barHistory.reset(); this.exact = { ...EMPTY_CROP }; this.sentinel = { ...EMPTY_CROP }; }
     if (!protectedFrame && now - this.lastBarDetection < 400) return;
     this.lastBarDetection = now;
     const { width: w, height: h } = sample.canvas;
@@ -133,13 +182,13 @@ export class EffectsController {
     if (this.barCanvas.width !== w || this.barCanvas.height !== h) { this.barCanvas.width = w; this.barCanvas.height = h; }
     this.barCtx.drawImage(sample.canvas, 0, 0);
     const pixels = this.barCtx.getImageData(0, 0, w, h);
-    const filled = protectedFrame && this.barFill.visible;
-    // The screenshot shows our own fill where the bars were; restore them as black so the
-    // detector still sees the accepted padding and can track bars that grow beyond it.
+    const filled = protectedFrame && this.fillShown(), dark = protectedFrame ? 16 : 14;
+    // The screenshot shows Ambience where the bars were; restore them as black (rounding outward)
+    // so the coarse detector still sees the accepted padding and can track bars that grow.
     if (filled) {
-      const region = this.barRegion(), data = pixels.data;
-      const top = Math.round(region.top * h), bottom = h - Math.round(region.bottom * h);
-      const left = Math.round(region.left * w), right = w - Math.round(region.right * w);
+      const region = this.contentCrop(), data = pixels.data;
+      const top = Math.ceil(region.top * h), bottom = h - Math.ceil(region.bottom * h);
+      const left = Math.ceil(region.left * w), right = w - Math.ceil(region.right * w);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         if (y >= top && y < bottom && x >= left && x < right) continue;
         const i = (y * w + x) * 4; data[i] = data[i + 1] = data[i + 2] = 0;
@@ -148,32 +197,59 @@ export class EffectsController {
     this.barDepth = { w, h };
     this.bars.maxGap = protectedFrame ? 4000 : 1400;
     const observation = this.barHistory.observe(pixels, now, protectedFrame);
+    if (observation) this.lastObservation = { ...observation.crop };
     debugCount(observation ? 'barObservation' : 'barObservationNone');
-    // Ambiguous (dark scene, fade, black frame): keep the accepted bars, never create or remove them.
-    if (!observation) return;
+    const strips = sample.strips ?? [];
+    if (strips.length) this.stripsRead++;
     const accepted = this.bars.crop, size = { top: h, bottom: h, left: w, right: w };
-    const shrunk = (['top', 'right', 'bottom', 'left'] as const).filter(edge => observation.crop[edge] < accepted[edge] - (filled ? 1.5 : .5) / size[edge]);
-    if (shrunk.length) {
-      // Picture where bars were: retract at once (growth still goes through hysteresis below).
-      debugCount('barRetract');
-      this.lastRetract = shrunk.join(',');
-      if (filled) {
-        // Picture opening up is centred, while player overlays (progress bar, captions) sit on one
-        // side: in a screenshot, retract only when both seams of a pair lit up.
-        const runs = this.barHistory.diagnostics.runs, lit = (edge: keyof Crop) => runs[edge] < accepted[edge] * size[edge] + 1 - 1.5;
-        if (!(accepted.top && lit('top') && lit('bottom') || accepted.left && lit('left') && lit('right'))) { debugCount('barRetractIgnored'); return; }
-        // Masked screenshot: only the seam is real, the true new extent is unknown. Drop the fill
-        // and the masked history; re-acquire from unfilled captures with normal hysteresis.
-        this.bars.reset(); this.barHistory.reset(); this.barFill.hold(true); this.barFill.setBars(EMPTY_CROP); this.barFill.hold(false);
-        return;
+    if (filled) {
+      // Only the sentinel rows still show the video. Picture there on both sides of a pair means the
+      // picture opened up (IMAX, a new clip): retract within this capture. One side alone is a player
+      // overlay (progress bar, captions) and is ignored.
+      const lit: Partial<Record<keyof Crop, boolean>> = {};
+      for (const strip of strips) {
+        const e = this.exact[strip.edge], sv = this.sentinel[strip.edge];
+        if (!(e > 0)) continue;
+        const i0 = Math.max(0, Math.round((e - sv - strip.from) * strip.depth)), i1 = Math.min(strip.medians.length, Math.round((e - strip.from) * strip.depth));
+        if (i1 <= i0) continue;
+        let min = 255; for (let i = i0; i < i1; i++) min = Math.min(min, strip.medians[i]!);
+        this.sentinelLuma[strip.edge] = min; lit[strip.edge] = min > dark;
       }
-      const next = { ...accepted };
-      for (const edge of shrunk) next[edge] = observation.crop[edge];
-      this.bars.setCrop(next);
+      if (lit.top && lit.bottom || lit.left && lit.right) {
+        debugCount('barRetract'); this.lastRetract = (['top', 'right', 'bottom', 'left'] as const).filter(edge => lit[edge]).join(',');
+        // Under the fill the true new extent is unknown: drop it and the masked history, re-acquire unfilled.
+        this.bars.reset(); this.barHistory.reset(); this.exact = { ...EMPTY_CROP }; this.sentinel = { ...EMPTY_CROP };
+        this.applyFill(); return;
+      }
+      if (Object.values(lit).some(Boolean)) debugCount('barRetractIgnored');
+      // Growth still goes through hysteresis; coarse shrink can't be seen under the fill.
+      if (observation && this.bars.observe(observation, now)) { debugCount('barAccepted'); this.exact = { ...EMPTY_CROP }; this.applyFill(); }
       return;
     }
-    const next = this.bars.observe(observation, now);
-    if (next) debugCount('barAccepted');
+    // Unfilled frames show the real bars: refine the exact boundary from full-resolution rows.
+    const refined: Partial<Record<keyof Crop, number>> = {};
+    for (const strip of strips) { const value = this.refineEdge(strip, dark); if (value !== null) refined[strip.edge] = value; }
+    // Ambiguous (dark scene, fade, black frame): never create or remove bars; only a lit row inside
+    // the refined bar (picture there for real) may shrink it.
+    if (observation) {
+      const shrunk = (['top', 'right', 'bottom', 'left'] as const).filter(edge => observation.crop[edge] < accepted[edge] - .5 / size[edge]);
+      if (shrunk.length) {
+        debugCount('barRetract'); this.lastRetract = shrunk.join(',');
+        const next = { ...accepted };
+        for (const edge of shrunk) { next[edge] = observation.crop[edge]; this.exact[edge] = 0; }
+        this.bars.setCrop(next);
+      } else if (this.bars.observe(observation, now)) { debugCount('barAccepted'); this.exact = { ...EMPTY_CROP }; }
+    }
+    const crop = this.bars.crop;
+    for (const edge of ['top', 'right', 'bottom', 'left'] as const) {
+      const value = refined[edge], step = 1 / size[edge];
+      if (!(crop[edge] > 0)) { this.exact[edge] = 0; continue; }
+      // Trust a refinement only near the accepted coarse boundary; afterwards it may only shrink the bar.
+      if (value === undefined || Math.abs(value - (crop[edge] + step)) > 2.5 * step) continue;
+      this.exact[edge] = this.exact[edge] > 0 ? Math.min(this.exact[edge], value) : value;
+      this.sentinel[edge] = protectedFrame ? 3 / strips.find(strip => strip.edge === edge)!.depth : 0;
+    }
+    this.applyFill();
   }
   private wake = (): void => {
     if (this.disposed) return;
@@ -206,6 +282,7 @@ export class EffectsController {
         readPixels: this.settings.autoCrop,
         // The detector needs real resolution; Colour mode alone would sample 32 px wide.
         width: this.settings.ambience === 'colour' && !fill ? 32 : 192,
+        strips: fill && (this.barProtected || performance.now() - this.lastBarDetection >= 400) ? this.stripRequests() : undefined,
       });
       if (this.disposed || generation !== this.generation) return;
       const now = performance.now();
@@ -219,12 +296,12 @@ export class EffectsController {
         if (fill) {
           this.detectBars(sample, now);
           // Backdrop from content only: keeps black (or, in screenshots, our own fill) out of it.
-          if (sample.detectorSafe) ambienceCrop = this.barRegion();
+          if (sample.detectorSafe) ambienceCrop = this.contentCrop();
         }
         if (this.settings.ambience !== 'off') this.ambience.render(sample.canvas, sample.canvas.width, sample.canvas.height, ambienceCrop, now, sample.source === 'compatibility');
       }
-      if (fill) { this.syncBarFill(); if (sample) this.barFill.paint(this.ambience.backdrop); this.debugBars(); }
-      else this.barFill.dispose();
+      if (fill) { this.applyFill(); if (sample && this.barMode === 'paint') this.barFill.paint(this.ambience.backdrop); this.debugBars(); }
+      else if (this.barMode !== 'off') this.applyFill();
       // The transform engine owns visual interpolation. Do not ease the same
       // crop again here: that would freeze partway when screenshot sampling
       // must hold because the accepted crop hides the source boundaries.
@@ -265,7 +342,8 @@ export class EffectsController {
     debugState({ barFill: {
       wanted: !this.disposed && this.fillWanted(), path: this.barProtected ? 'protected' : 'direct',
       bars: round(this.bars.crop), region: round(this.barRegion()), visible: this.barFill.visible, placed: this.barFill.placed,
-      lastRetract: this.lastRetract, sample: `${this.barDepth.w}x${this.barDepth.h}`, safe: this.barSafe,
+      lastRetract: this.lastRetract, mode: this.barMode, exact: round(this.exact), sentinel: round(this.sentinel),
+      sentinelLuma: this.sentinelLuma, stripsRead: this.stripsRead, sample: `${this.barDepth.w}x${this.barDepth.h}`, safe: this.barSafe,
       diag: this.barHistory.diagnostics,
     } });
   }

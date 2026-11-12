@@ -5,6 +5,8 @@ const applyLog: (string | number)[][] = [];
 import { EMPTY_CROP, type Crop, type PlayerBinding, type Settings } from '../shared/types';
 import { automaticZoomFactor, portraitBlocked } from './eligibility';
 import { createCueOverlay, type CueOverlayController } from './cue-overlay';
+import { pictureBox } from '../features/bar-fill';
+import { ownedClips } from '../shared/bar-clip';
 
 interface OwnedStyle { original: string; priority: string; written: string; writtenPriority: string; requested: string }
 export class TransformEngine {
@@ -25,6 +27,8 @@ export class TransformEngine {
   // transition so they do not cancel it, and passes after it write 'none'.
   private transitionUntil = 0;
   private cues: CueOverlayController | null = null;
+  // Ambience bar fill: picture fractions to clip off so the backdrop behind shows through.
+  private barClip: Crop = { ...EMPTY_CROP };
   private onStyleMutation = () => {
     if (this.isWriting) return;
     this.refresh();
@@ -76,6 +80,21 @@ export class TransformEngine {
       if (!this.tweenStarted) this.renderedCrop = { ...crop };
     }
     this.schedule();
+  }
+  setBarClip(clip: Crop) {
+    if ((['top', 'right', 'bottom', 'left'] as const).every(edge => Math.abs(clip[edge] - this.barClip[edge]) < 1e-5)) return;
+    this.barClip = { ...clip }; this.schedule();
+  }
+  /** Writes the bar clip (only when no Auto Crop clip owns clip-path); returns whether it did. */
+  private applyBarClip(): boolean {
+    const video = this.binding.video, b = this.barClip;
+    const box = Object.values(b).some(v => v > 0) ? pictureBox(getComputedStyle(video), video.offsetWidth, video.offsetHeight, video.videoWidth, video.videoHeight) : null;
+    if (!box) { this.release(video, 'clip-path'); ownedClips.delete(video); return false; }
+    const top = Math.max(0, box.y + b.top * box.h), bottom = Math.max(0, video.offsetHeight - box.y - box.h + b.bottom * box.h);
+    const left = Math.max(0, box.x + b.left * box.w), right = Math.max(0, video.offsetWidth - box.x - box.w + b.right * box.w);
+    this.write(video, 'clip-path', `inset(${top.toFixed(2)}px ${right.toFixed(2)}px ${bottom.toFixed(2)}px ${left.toFixed(2)}px)`);
+    ownedClips.set(video, video.style.getPropertyValue('clip-path'));
+    return true;
   }
   rebind(binding: PlayerBinding) {
     if (binding.video !== this.binding.video) throw new Error('TransformEngine cannot rebind to a different video');
@@ -210,7 +229,8 @@ export class TransformEngine {
       if (s.ambience !== 'off') {
         this.write(video, 'background-color', 'transparent');
         if (viewport !== video) this.write(viewport, 'overflow', 'hidden');
-      }
+        this.applyBarClip();
+      } else ownedClips.delete(video);
       return;
     }
     // Native video fullscreen cannot safely host a sibling backdrop or resize its parent.
@@ -287,8 +307,9 @@ export class TransformEngine {
       const verticalPadding = (layoutH - ph) / 2;
       const horizontalPadding = (layoutW - pw) / 2;
       this.write(video, 'clip-path', `inset(${verticalPadding + c.top * ph}px ${horizontalPadding + c.right * pw}px ${verticalPadding + c.bottom * ph}px ${horizontalPadding + c.left * pw}px)`);
-    } else {
-      this.release(video, 'clip-path');
+      ownedClips.delete(video);
+    } else if (!(s.ambience !== 'off' && this.applyBarClip())) {
+      this.release(video, 'clip-path'); ownedClips.delete(video);
     }
     if (viewport !== video) this.write(viewport, 'overflow', 'hidden');
   }

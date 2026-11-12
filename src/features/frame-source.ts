@@ -2,10 +2,15 @@ import { EMPTY_CROP, type Crop, type FeatureStatus, type PlayerBinding, type Set
 import { isContextInvalidationError, isContextValid, markContextInvalid } from '../shared/storage';
 import { COMPATIBILITY_CAPTURE_AVAILABLE } from '../shared/features';
 import { i18n } from '../shared/i18n';
+import { ownedClips } from '../shared/bar-clip';
 import { DEBUG, debugState } from '../shared/debug';
 
-export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData | null; source: 'direct' | 'compatibility'; detectorSafe: boolean }
-export interface SampleRequest { readPixels?: boolean; width?: number }
+export interface Sample { canvas: HTMLCanvasElement; pixels: ImageData | null; source: 'direct' | 'compatibility'; detectorSafe: boolean; strips?: Strip[] }
+/** A band at an edge of the picture, `from`..`to` as fractions of the picture depth from that edge. */
+export interface StripRequest { edge: 'top' | 'right' | 'bottom' | 'left'; from: number; to: number }
+/** Median luma of each native source row/column in the band, ordered from the outer edge inward. */
+export interface Strip extends StripRequest { medians: Uint8Array; /** Native rows/columns across the whole picture depth. */ depth: number }
+export interface SampleRequest { readPixels?: boolean; width?: number; strips?: StripRequest[] }
 const hasCrop = (crop: Crop) => Object.values(crop).some(value => value > .001);
 const compatibilityEnabled = (settings: Settings) => COMPATIBILITY_CAPTURE_AVAILABLE && settings.compatibility;
 // Protected (EME) video paints black into canvases and makes ImageBitmap/VideoFrame throw,
@@ -29,6 +34,8 @@ export class FrameSource {
   private visualCtx: CanvasRenderingContext2D | null = null;
   private probe: HTMLCanvasElement | null = null;
   private probeCtx: CanvasRenderingContext2D | null = null;
+  private strip: HTMLCanvasElement | null = null;
+  private stripCtx: CanvasRenderingContext2D | null = null;
   private lastProbe = -Infinity;
   private protectedMode = false;
   private protectedBlack = 0;
@@ -47,7 +54,8 @@ export class FrameSource {
     this.invalidate(); this.canvas.width = 0; this.canvas.height = 0;
     if (this.visual) this.visual.width = this.visual.height = 0;
     if (this.probe) this.probe.width = this.probe.height = 0;
-    this.visual = this.probe = null; this.visualCtx = this.probeCtx = null;
+    if (this.strip) this.strip.width = this.strip.height = 0;
+    this.visual = this.probe = this.strip = null; this.visualCtx = this.probeCtx = this.stripCtx = null;
   }
   /** Time until a sample can yield a new frame; lets the consumer skip no-op ticks. */
   nextSampleDelay(): number { return this.protectedMode ? Math.max(0, this.nextCapture - performance.now()) : 0; }
@@ -55,7 +63,7 @@ export class FrameSource {
     const video = this.binding.video;
     if (!this.ctx || document.hidden || !video.isConnected || video.readyState < 2 || !video.videoWidth || !video.videoHeight) return null;
     if (request.readPixels === false) {
-      return this.protectedMode ? this.sampleProtected(settings, request.width ?? 192) : this.sampleVisual(settings, request.width ?? 192);
+      return this.protectedMode ? this.sampleProtected(settings, request.width ?? 192, request.strips) : this.sampleVisual(settings, request.width ?? 192, request.strips);
     }
     const size = { w: 192, h: Math.max(64, Math.min(192, Math.round(192 * video.videoHeight / video.videoWidth))) };
     if (this.canvas.width !== size.w || this.canvas.height !== size.h) { this.canvas.width = size.w; this.canvas.height = size.h; }
@@ -134,7 +142,7 @@ export class FrameSource {
     this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
     return null;
   }
-  private sampleVisual(settings: Settings, width: number): Sample | null {
+  private sampleVisual(settings: Settings, width: number, strips?: StripRequest[]): Sample | null {
     if (this.unreadable) {
       this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
       return null;
@@ -178,7 +186,7 @@ export class FrameSource {
       }
       this.status({ source: 'direct', message: this.lowInformation >= 6 ? i18n.t('status_dark_pixels') : i18n.t('status_local_sampling') });
       // The visual canvas holds the whole source frame, so bar detection may read it.
-      return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: true };
+      return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: true, strips: this.readStrips(video, 0, 0, video.videoWidth, video.videoHeight, strips) };
     } catch {
       this.visual.width = width; this.probe.width = 16;
       if (video.mediaKeys) { this.enterProtected(); return null; }
@@ -186,6 +194,39 @@ export class FrameSource {
       this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
       return null;
     }
+  }
+  /** Full-resolution bands at picture edges; `x,y,w,h` is the picture in source pixels. */
+  private readStrips(source: CanvasImageSource, x: number, y: number, w: number, h: number, requests?: StripRequest[]): Strip[] | undefined {
+    if (!requests?.length) return undefined;
+    this.strip ??= document.createElement('canvas');
+    this.stripCtx ??= this.strip.getContext('2d', { willReadFrequently: true });
+    const ctx = this.stripCtx, out: Strip[] = [];
+    if (!ctx) return undefined;
+    for (const request of requests) {
+      const horizontal = request.edge === 'top' || request.edge === 'bottom', depth = horizontal ? h : w;
+      const start = Math.round(request.from * depth), count = Math.min(96, Math.round(request.to * depth) - start);
+      if (count < 4) continue;
+      // Across the band only the central 60% is sampled (other bars, logos); 128 samples suffice for a median.
+      const along = 128, offset = (horizontal ? w : h) * .2, span = (horizontal ? w : h) * .6;
+      const near = request.edge === 'top' ? y + start : request.edge === 'bottom' ? y + h - start - count : request.edge === 'left' ? x + start : x + w - start - count;
+      const cw = horizontal ? along : count, ch = horizontal ? count : along;
+      if (this.strip.width !== cw || this.strip.height !== ch) { this.strip.width = cw; this.strip.height = ch; }
+      ctx.imageSmoothingEnabled = false;
+      if (horizontal) ctx.drawImage(source, x + offset, near, span, count, 0, 0, cw, ch);
+      else ctx.drawImage(source, near, y + offset, count, span, 0, 0, cw, ch);
+      const data = ctx.getImageData(0, 0, cw, ch).data, medians = new Uint8Array(count), values = new Uint8Array(along);
+      for (let i = 0; i < count; i++) {
+        // Index from the outer edge inward.
+        const line = request.edge === 'top' || request.edge === 'left' ? i : count - 1 - i;
+        for (let a = 0; a < along; a++) {
+          const p = (horizontal ? line * cw + a : a * cw + line) * 4;
+          values[a] = .2126 * data[p]! + .7152 * data[p + 1]! + .0722 * data[p + 2]!;
+        }
+        values.sort(); medians[i] = values[along >> 1]!;
+      }
+      out.push({ ...request, from: start / depth, to: (start + count) / depth, medians, depth });
+    }
+    return out;
   }
   private enterProtected(): void {
     this.protectedMode = true; this.nextCapture = 0; this.failureCount = 0;
@@ -199,7 +240,7 @@ export class FrameSource {
     const right = Math.min(innerWidth, picture.right, host.right), bottom = Math.min(innerHeight, picture.bottom, host.bottom);
     return right - left >= 24 && bottom - top >= 24 ? new DOMRect(left, top, right - left, bottom - top) : null;
   }
-  private async sampleProtected(settings: Settings, width: number): Promise<Sample | null> {
+  private async sampleProtected(settings: Settings, width: number, strips?: StripRequest[]): Promise<Sample | null> {
     const video = this.binding.video, now = performance.now();
     if (window.top !== window) { this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') }); return null; }
     if (now < this.nextCapture) return null;
@@ -240,8 +281,10 @@ export class FrameSource {
         this.failureCount = 0;
         this.status({ source: 'compatibility', message: i18n.t('status_protected_sampling') });
         // Only an unclipped, mappable picture represents the whole source frame for bar detection.
-        const picture = this.pictureRect(video.getBoundingClientRect());
-        return { canvas: this.visual, pixels: null, source: 'compatibility', detectorSafe: !!picture && sameRect(picture, rect) };
+        const picture = this.pictureRect(video.getBoundingClientRect()), detectorSafe = !!picture && sameRect(picture, rect);
+        // Bar boundaries are read from the decoded shot at device resolution, before it is closed.
+        return { canvas: this.visual, pixels: null, source: 'compatibility', detectorSafe,
+          strips: detectorSafe ? this.readStrips(bitmap, rect.x * sx, rect.y * sy, rect.width * sx, rect.height * sy, strips) : undefined };
       } finally { bitmap.close(); }
     } catch (error) {
       if (generation !== this.generation) return null;
@@ -258,7 +301,8 @@ export class FrameSource {
   }
   private pictureRect(rect: DOMRect): DOMRect | null {
     const video = this.binding.video, cs = getComputedStyle(video);
-    if (cs.objectPosition !== '50% 50%' || cs.clipPath !== 'none') return null;
+    // Our own bar clip (written by the transform engine) leaves the picture geometry unchanged.
+    if (cs.objectPosition !== '50% 50%' || cs.clipPath !== 'none' && video.style.getPropertyValue('clip-path') !== ownedClips.get(video)) return null;
     if (!['contain', 'scale-down', 'fill'].includes(cs.objectFit)) return null;
     // Rotated/skewed elements cannot be mapped from an axis-aligned screenshot box.
     if (cs.transform !== 'none') { const matrix = new DOMMatrix(cs.transform); if (!matrix.is2D || Math.abs(matrix.b) > .001 || Math.abs(matrix.c) > .001 || matrix.a <= 0 || matrix.d <= 0 || Math.abs(matrix.a - matrix.d) > .001) return null; }

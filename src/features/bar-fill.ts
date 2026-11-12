@@ -5,7 +5,7 @@ export const hasBars = (crop: Crop) => Object.values(crop).some(value => value >
 const MIRRORED = ['transform', 'transform-origin', 'scale', 'translate', 'rotate', 'transition'] as const;
 
 /** Picture box inside the video's layout box (CSS px, before transforms), or null when object-fit can't be mapped. */
-function pictureBox(cs: CSSStyleDeclaration, w: number, h: number, vw: number, vh: number) {
+export function pictureBox(cs: CSSStyleDeclaration, w: number, h: number, vw: number, vh: number) {
   if (!vw || !vh || w < 2 || h < 2 || cs.objectPosition !== '50% 50%') return null;
   let pw: number, ph: number;
   if (cs.objectFit === 'fill') { pw = w; ph = h; }
@@ -49,12 +49,12 @@ export class BarFill {
   paint(backdrop: HTMLCanvasElement | null): void {
     if (!backdrop || !this.ctx || !hasBars(this.bars)) return;
     this.ctx.drawImage(backdrop, 0, 0, 192, 108);
-    this.sync();
+    this.sync(); this.map(backdrop);
     if (!this.painted) { this.painted = true; this.apply(); }
   }
   /** Cheap per-frame copy while the backdrop morphs between samples; layout is synced by paint(). */
   repaint(backdrop: HTMLCanvasElement | null): void {
-    if (backdrop && this.ctx && this.painted && hasBars(this.bars)) this.ctx.drawImage(backdrop, 0, 0, 192, 108);
+    if (backdrop && this.ctx && this.painted && hasBars(this.bars)) { this.ctx.drawImage(backdrop, 0, 0, 192, 108); this.map(backdrop); }
   }
   /** Hide without a fade so the next screenshot sees the real bars (protected-video re-check). */
   hold(held: boolean): void {
@@ -62,6 +62,21 @@ export class BarFill {
     this.held = held;
     if (this.frame && held) this.frame.style.transition = 'none';
     this.apply();
+  }
+  /**
+   * Place our copy exactly where the main backdrop draws (its object-fit: cover content box,
+   * after its scale transform), so the fill continues the backdrop instead of restretching it.
+   */
+  private map(backdrop: HTMLCanvasElement): void {
+    const frame = this.frame, canvas = this.ctx?.canvas;
+    if (!frame || !canvas || !frame.offsetWidth) return;
+    const box = backdrop.getBoundingClientRect(), fr = frame.getBoundingClientRect();
+    const k = fr.width / frame.offsetWidth;
+    if (!box.width || !box.height || !k) return;
+    const cover = Math.max(box.width / backdrop.width, box.height / backdrop.height);
+    const cw = backdrop.width * cover, ch = backdrop.height * cover;
+    const left = box.left + (box.width - cw) / 2, top = box.top + (box.height - ch) / 2;
+    Object.assign(canvas.style, { inset: 'auto', left: `${(left - fr.left) / k}px`, top: `${(top - fr.top) / k}px`, width: `${cw / k}px`, height: `${ch / k}px` });
   }
   private create(): boolean {
     const video = this.binding.video;
@@ -71,7 +86,7 @@ export class BarFill {
     host.dataset.justZoom = 'ambience'; host.dataset.jzPart = 'bar-fill'; host.setAttribute('aria-hidden', 'true');
     Object.assign(host.style, { position: 'absolute', pointerEvents: 'none', overflow: 'hidden', margin: '0', padding: '0', border: '0', display: 'none' });
     const frame = document.createElement('div');
-    Object.assign(frame.style, { position: 'absolute', opacity: '0' });
+    Object.assign(frame.style, { position: 'absolute', opacity: '0', overflow: 'hidden' });
     const canvas = document.createElement('canvas'); canvas.width = 192; canvas.height = 108;
     Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
     frame.append(canvas); host.append(frame);

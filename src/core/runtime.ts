@@ -181,7 +181,7 @@ export function startRuntime(): () => void {
       }, next => {
         if (disposed || identity !== generation) return;
         status = next; updateControls(); debugState({ status: status.source });
-      });
+      }, clip => { if (!disposed) transform?.setBarClip(clip); });
       effects.setCrop(crop);
     }
     transform.update(settings, crop, animateZoom, immediate); effects.update({ ...settings, autoCrop: settings.autoCrop && settings.zoomApplied }); updateControls();
