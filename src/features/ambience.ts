@@ -2,11 +2,13 @@ import type { Crop, PlayerBinding, Settings } from '../shared/types';
 import { debugCount, debugState } from '../shared/debug';
 
 const W = 192, H = 108;
-// Low-rate (screenshot) samples arrive every 0.75-1.5 s. Each new sample starts a
-// near-linear cross-fade from what is on screen now to the new frame, lasting a little
-// longer than the measured sample gap, so the backdrop keeps drifting toward the
-// latest picture instead of stepping. A scene cut gets a short eased fade instead.
-const MORPH_MIN = 450, MORPH_MAX = 1800, MORPH_CUT = 380, MORPH_REDUCED = 300, MORPH_FRAME = 30;
+// Each new sample starts a near-linear cross-fade from what is on screen now to the new
+// frame, lasting a little longer than the measured sample gap, so the backdrop keeps
+// drifting toward the latest picture instead of stepping. Low-rate (screenshot) samples
+// arrive every 0.75-1.5 s; direct samples every ~40-170 ms, where the 300 ms floor keeps
+// the old exponential fade's smoothing. A scene cut gets a short eased fade instead.
+const MORPH_MIN = 450, MORPH_DIRECT_MIN = 300, MORPH_MAX = 1800, MORPH_CUT = 380, MORPH_REDUCED = 300, MORPH_FRAME = 30;
+const GAP_IGNORE = 2500, PROBE_EVERY = 100;
 const CUT_DIFF = 48; // mean absolute 0-255 channel difference over an 8x6 grid
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -18,7 +20,7 @@ export class AmbienceRenderer {
   private stage: HTMLCanvasElement | null = null;
   private stageCtx: CanvasRenderingContext2D | null = null;
   private saved: { property: string; value: string; priority: string; written: string }[] = [];
-  // Low-rate morph state: `from` holds the display at transition start, `next` the
+  // Morph state: `from` holds the display at transition start, `next` the
   // processed incoming frame. Both stay at the backdrop's 192x108 size.
   private from: HTMLCanvasElement | null = null;
   private next: HTMLCanvasElement | null = null;
@@ -29,9 +31,11 @@ export class AmbienceRenderer {
   private morphCut = false;
   private morphDrawn = 0;
   private raf = 0;
-  private gap = 1000;
-  private lastSlow = 0;
-  /** Called after each low-rate morph frame so mirrors of the backdrop (bar fill) move with it. */
+  private gap = -1;
+  private lastSample = 0;
+  private lowRate = false;
+  private probeAt = 0;
+  /** Called after each morph frame so mirrors of the backdrop (bar fill) move with it. */
   onFrame: (() => void) | null = null;
   constructor(private readonly binding: PlayerBinding) {}
   /** Last rendered backdrop, for consumers that repaint it elsewhere (bar fill). */
@@ -69,13 +73,43 @@ export class AmbienceRenderer {
   }
   render(source: CanvasImageSource, w: number, h: number, crop: Crop, now: number, lowRate = false): void {
     if (!this.ctx || !this.canvas) return;
-    if (lowRate) { this.renderLowRate(source, w, h, crop, now); return; }
-    // Direct path: unchanged short exponential cross-fade per sample.
-    this.stopMorph(); this.lastSlow = 0; this.probeLast = null;
-    const ctx = this.ctx, first = this.lastFrame === 0;
-    ctx.globalAlpha = first || reducedMotion() ? 1 : 1 - Math.exp(-Math.min(1, Math.max(.001, (now - this.lastFrame) / 1000)) / .3);
-    this.compose(ctx, source, w, h, crop);
-    ctx.globalAlpha = 1; this.lastFrame = now; this.canvas.style.opacity = '1';
+    const ctx = this.ctx, canvas = this.canvas, reduced = reducedMotion();
+    if (lowRate !== this.lowRate) { this.lowRate = lowRate; this.lastSample = 0; this.gap = -1; this.probeLast = null; }
+    // Reduced motion on direct samples: replace the frame outright, as before.
+    if (!lowRate && reduced) {
+      this.stopMorph(); ctx.globalAlpha = 1; this.compose(ctx, source, w, h, crop);
+      this.lastFrame = now; canvas.style.opacity = '1'; debugState({ ambienceMorph: 'settled' }); return;
+    }
+    this.next ??= sized(document.createElement('canvas'));
+    this.from ??= sized(document.createElement('canvas'));
+    const nextCtx = this.next.getContext('2d'), fromCtx = this.from.getContext('2d');
+    if (!nextCtx || !fromCtx) return;
+    const first = this.lastFrame === 0;
+    // Effective sample gap (EMA). Gaps across pauses/holds would stretch the morph, so skip them.
+    if (this.lastSample) {
+      const gap = now - this.lastSample;
+      if (gap < GAP_IGNORE) this.gap = this.gap < 0 ? gap : this.gap * .6 + gap * .4;
+    }
+    this.lastSample = now;
+    const cut = this.sceneCut(source, w, h, crop, now);
+    // Freeze whatever is on screen (possibly mid-transition) as the new starting point.
+    fromCtx.globalAlpha = 1; fromCtx.drawImage(canvas, 0, 0);
+    nextCtx.globalAlpha = 1; nextCtx.clearRect(0, 0, W, H);
+    this.compose(nextCtx, source, w, h, crop);
+    this.lastFrame = now;
+    if (first) {
+      this.stopMorph(); ctx.globalAlpha = 1; ctx.drawImage(this.next, 0, 0); canvas.style.opacity = '1';
+      debugState({ ambienceMorph: 'settled' }); return;
+    }
+    // Glide across the whole gap (slightly longer, so motion never pauses between
+    // samples). Fast direct sampling keeps at least the old 0.3 s smoothing window.
+    const gap = this.gap < 0 ? (lowRate ? 1000 : 100) : this.gap;
+    const glide = Math.min(MORPH_MAX, Math.max(lowRate ? MORPH_MIN : MORPH_DIRECT_MIN, gap * 1.15));
+    this.morphCut = cut && !reduced;
+    this.morphDuration = reduced ? MORPH_REDUCED : cut ? Math.min(MORPH_CUT, glide * .66) : glide;
+    this.morphStart = performance.now();
+    debugState({ ambienceMorph: reduced ? 'fade' : cut ? 'cut' : 'morph', ambienceMorphPath: lowRate ? 'low-rate' : 'direct', ambienceMorphMs: Math.round(this.morphDuration), ambienceGapMs: Math.round(gap) });
+    if (!this.raf) this.raf = requestAnimationFrame(this.step);
   }
   /** Draws the processed backdrop (blur or colour field, dimmed) into `ctx` at its current globalAlpha. */
   private compose(ctx: CanvasRenderingContext2D, source: CanvasImageSource, w: number, h: number, crop: Crop): void {
@@ -110,32 +144,6 @@ export class AmbienceRenderer {
     }
     ctx.filter = 'none';
   }
-  private renderLowRate(source: CanvasImageSource, w: number, h: number, crop: Crop, now: number): void {
-    const ctx = this.ctx!, canvas = this.canvas!;
-    this.next ??= sized(document.createElement('canvas'));
-    this.from ??= sized(document.createElement('canvas'));
-    const nextCtx = this.next.getContext('2d'), fromCtx = this.from.getContext('2d');
-    if (!nextCtx || !fromCtx) return;
-    const first = this.lastFrame === 0;
-    if (this.lastSlow) this.gap = this.gap * .6 + Math.min(4000, now - this.lastSlow) * .4;
-    this.lastSlow = now;
-    const cut = this.sceneCut(source, w, h, crop);
-    // Freeze whatever is on screen (possibly mid-transition) as the new starting point.
-    fromCtx.globalAlpha = 1; fromCtx.drawImage(canvas, 0, 0);
-    nextCtx.globalAlpha = 1; nextCtx.clearRect(0, 0, W, H);
-    this.compose(nextCtx, source, w, h, crop);
-    this.lastFrame = now;
-    if (first) {
-      this.stopMorph(); ctx.globalAlpha = 1; ctx.drawImage(this.next, 0, 0); canvas.style.opacity = '1';
-      debugState({ ambienceMorph: 'settled' }); return;
-    }
-    const reduced = reducedMotion();
-    this.morphCut = cut && !reduced;
-    this.morphDuration = reduced ? MORPH_REDUCED : cut ? MORPH_CUT : Math.min(MORPH_MAX, Math.max(MORPH_MIN, this.gap * 1.15));
-    this.morphStart = performance.now(); this.morphDrawn = 0;
-    debugState({ ambienceMorph: reduced ? 'fade' : cut ? 'cut' : 'morph', ambienceMorphMs: Math.round(this.morphDuration), ambienceGapMs: Math.round(this.gap) });
-    if (!this.raf) this.raf = requestAnimationFrame(this.step);
-  }
   private step = (time: number): void => {
     this.raf = 0;
     const ctx = this.ctx;
@@ -156,7 +164,10 @@ export class AmbienceRenderer {
     else debugState({ ambienceMorph: 'settled' });
   };
   /** Cheap scene-cut test on an 8x6 average-colour grid; false when pixels are unreadable. */
-  private sceneCut(source: CanvasImageSource, w: number, h: number, crop: Crop): boolean {
+  private sceneCut(source: CanvasImageSource, w: number, h: number, crop: Crop, now: number): boolean {
+    // Direct samples arrive up to 25x/s; probing every ~100 ms still catches cuts (vs the older probe).
+    if (now - this.probeAt < PROBE_EVERY) return false;
+    this.probeAt = now;
     try {
       this.probe ??= Object.assign(document.createElement('canvas'), { width: 8, height: 6 });
       const pctx = this.probe.getContext('2d', { willReadFrequently: true });
@@ -179,7 +190,7 @@ export class AmbienceRenderer {
   }
   private stopMorph(): void { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
   dispose(): void {
-    this.stopMorph(); this.lastSlow = 0; this.probeLast = null; this.gap = 1000;
+    this.stopMorph(); this.lastSample = 0; this.probeLast = null; this.probeAt = 0; this.gap = -1;
     for (const c of [this.from, this.next, this.probe]) if (c) c.width = c.height = 0;
     this.from = this.next = this.probe = null;
     this.canvas?.remove(); this.canvas = null; this.ctx = null; this.lastFrame = 0;

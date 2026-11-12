@@ -173,7 +173,7 @@ export class EffectsController {
         ? { source: 'unavailable', message: i18n.t('status_ambience_fullscreen') }
         : { source: 'idle', message: '' }); return;
     }
-    // Out of sight: finish any low-rate morph now instead of animating unseen.
+    // Out of sight: finish any Ambience morph now instead of animating unseen.
     if (document.hidden || !this.intersection || !this.binding.video.isConnected) { this.ambience.settle(); return; }
     if (this.binding.video.paused && this.staticDone) return;
     const generation = this.generation;
