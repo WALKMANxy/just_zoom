@@ -1,8 +1,8 @@
 // Reads the page's own `::cue` styling so overlay subtitles keep the site look.
 // getComputedStyle(video, '::cue') does not reflect page rules reliably, so the
 // same-origin CSSOM is scanned instead. Sites often rewrite these rules through
-// CSSOM (no DOM mutation), so callers re-read on every cuechange; the signature
-// lets them skip work when nothing changed.
+// CSSOM (no DOM mutation), so callers re-read periodically on cuechange (the scan
+// is cached, not repeated per cue); the signature lets them skip unchanged rules.
 
 const PROPS = ['color', 'background-color', 'text-shadow', 'font-family', 'font-weight', 'font-style', 'font-size', 'opacity',
   '-webkit-text-stroke-width', '-webkit-text-stroke-color'] as const;
