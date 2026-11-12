@@ -66,9 +66,7 @@ const modeSelect = document.querySelector<HTMLSelectElement>('#setting-mode')!;
 const zoomStrategySelect = document.querySelector<HTMLSelectElement>('#setting-zoomStrategy')!;
 const zoomSlider = document.querySelector<HTMLInputElement>('#setting-zoom')!;
 const zoomVal = document.querySelector<HTMLElement>('#setting-zoom-val')!;
-const ambienceButtons = document.querySelectorAll<HTMLButtonElement>('#setting-ambience button');
-const ambienceRateButtons = document.querySelectorAll<HTMLButtonElement>('#setting-ambienceRate button');
-const ambienceFillBarsCheckbox = document.querySelector<HTMLInputElement>('#setting-ambienceFillBars')!;
+const drmWorkaroundCheckbox = document.querySelector<HTMLInputElement>('#setting-drmWorkaround')!;
 const settingsStatus = document.querySelector<HTMLElement>('#settings-status')!;
 const settingsSaveBtn = document.querySelector<HTMLButtonElement>('#settings-save-btn')!;
 const settingsResetBtn = document.querySelector<HTMLButtonElement>('#settings-reset-btn')!;
@@ -98,13 +96,16 @@ function selectedButtonValue(buttons: NodeListOf<HTMLButtonElement>, fallback: s
   return Array.from(buttons).find(button => button.getAttribute('aria-pressed') === 'true')?.dataset.value || fallback;
 }
 
-ambienceButtons.forEach(button => {
-  button.addEventListener('click', () => setExclusiveButtons(ambienceButtons, button.dataset.value || 'blur'));
-});
+/** Wires an `.experiment-segments` group so a click selects exactly one button. */
+function segmented(id: string) {
+  const buttons = document.querySelectorAll<HTMLButtonElement>(`#${id} button`);
+  buttons.forEach(button => button.addEventListener('click', () => setExclusiveButtons(buttons, button.dataset.value ?? '')));
+  return buttons;
+}
 
-ambienceRateButtons.forEach(button => {
-  button.addEventListener('click', () => setExclusiveButtons(ambienceRateButtons, button.dataset.value || 'high'));
-});
+const ambienceButtons = segmented('setting-ambience');
+const ambienceRateButtons = segmented('setting-ambienceRate');
+const ambienceFillBarsButtons = segmented('setting-ambienceFillBars');
 
 function updateZoomDisplay() {
   const val = Number.parseFloat(zoomSlider.value);
@@ -134,23 +135,7 @@ function updateMasterToggleUI(enabled: boolean) {
   const label = masterToggleBtn.querySelector('.toggle-label');
   if (label) label.textContent = enabled ? i18n.t('popup_enabled_label') : i18n.t('popup_disabled_label');
   settingsGrid.classList.toggle('disabled-grid', !enabled);
-  controlModeSelect.disabled = !enabled;
-  buttonActionSelect.disabled = !enabled;
-  rememberSiteStateCheckbox.disabled = !enabled;
-  animationsCheckbox.disabled = !enabled;
-  allowPortraitCheckbox.disabled = !enabled;
-  gesturesEnabledCheckbox.disabled = !enabled;
-  gestureModifierSelect.disabled = !enabled;
-  hudEnabledCheckbox.disabled = !enabled;
-  modeSelect.disabled = !enabled;
-  zoomStrategySelect.disabled = !enabled;
-  zoomSlider.disabled = !enabled;
-  ambienceButtons.forEach(button => { button.disabled = !enabled; });
-  ambienceRateButtons.forEach(button => { button.disabled = !enabled; });
-  ambienceFillBarsCheckbox.disabled = !enabled;
-  displayProfileSelect.disabled = !enabled;
-  customRatioInput.disabled = !enabled;
-  zoomPresetChips.forEach(chip => { chip.disabled = !enabled; });
+  settingsGrid.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button').forEach(el => { el.disabled = !enabled; });
 }
 
 function updateDisplayProfileUI() {
@@ -220,16 +205,16 @@ function applySettingsToForm(settings: Settings) {
   updateZoomDisplay();
   setExclusiveButtons(ambienceButtons, settings.ambience);
   setExclusiveButtons(ambienceRateButtons, settings.ambienceRate);
-  ambienceFillBarsCheckbox.checked = settings.ambienceFillBars;
+  setExclusiveButtons(ambienceFillBarsButtons, settings.ambienceFillBars ? 'on' : 'off');
+  drmWorkaroundCheckbox.checked = settings.drmWorkaround;
   videoFinderModeSelect.value = settings.videoFinderMode || 'treewalker';
   nativeHtml5WorkaroundCheckbox.checked = settings.nativeHtml5Workaround ?? true;
-  if (nativePlayerSkinSelect) nativePlayerSkinSelect.value = settings.nativePlayerSkin || 'classic';
+  nativePlayerSkinSelect.value = settings.nativePlayerSkin || 'classic';
 }
 
 function readSettingsFromForm(): Settings {
   return {
     ...currentGlobal,
-    enabled: currentGlobal.enabled,
     language: (languageSelect.value as Language) || 'auto',
     controlMode: controlModeSelect.value as 'both' | 'native' | 'floating',
     buttonAction: buttonActionSelect.value as 'zoom-in' | 'zoom-out',
@@ -246,10 +231,11 @@ function readSettingsFromForm(): Settings {
     zoom: Number.parseFloat(zoomSlider.value) || 1.34,
     ambience: selectedButtonValue(ambienceButtons, 'blur') as Settings['ambience'],
     ambienceRate: selectedButtonValue(ambienceRateButtons, 'high') as Settings['ambienceRate'],
-    ambienceFillBars: ambienceFillBarsCheckbox.checked,
+    ambienceFillBars: selectedButtonValue(ambienceFillBarsButtons, 'off') === 'on',
+    drmWorkaround: drmWorkaroundCheckbox.checked,
     videoFinderMode: (videoFinderModeSelect.value as 'treewalker' | 'bruteforce') || 'treewalker',
     nativeHtml5Workaround: nativeHtml5WorkaroundCheckbox.checked,
-    nativePlayerSkin: (nativePlayerSkinSelect?.value as Settings['nativePlayerSkin']) || 'classic',
+    nativePlayerSkin: (nativePlayerSkinSelect.value as Settings['nativePlayerSkin']) || 'classic',
   };
 }
 
@@ -299,19 +285,25 @@ async function persistGlobalSettings(settings: Settings) {
   }
 }
 
-settingsSaveBtn.addEventListener('click', async () => {
-  const next = readSettingsFromForm();
-  currentGlobal = next;
-  settingsSaveBtn.disabled = true;
-  try {
-    await persistGlobalSettings(next);
-    settingsStatus.textContent = i18n.t('options_status_saved_at', [new Date().toLocaleTimeString()]);
-  } catch {
-    settingsStatus.textContent = i18n.t('options_status_save_failed');
-  } finally {
-    settingsSaveBtn.disabled = false;
-  }
-});
+// Both save buttons persist the whole form; they differ only in where they report.
+function wireSave(button: HTMLButtonElement, status: HTMLElement, saved: 'options_status_saved_at' | 'options_status_experimental_saved_at',
+  failed: 'options_status_save_failed' | 'options_status_experimental_save_failed') {
+  button.addEventListener('click', async () => {
+    const next = readSettingsFromForm();
+    currentGlobal = next;
+    button.disabled = true;
+    try {
+      await persistGlobalSettings(next);
+      status.textContent = i18n.t(saved, [new Date().toLocaleTimeString()]);
+    } catch {
+      status.textContent = i18n.t(failed);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+wireSave(settingsSaveBtn, settingsStatus, 'options_status_saved_at', 'options_status_save_failed');
+wireSave(experimentalSaveBtn, experimentalStatus, 'options_status_experimental_saved_at', 'options_status_experimental_save_failed');
 
 settingsResetBtn.addEventListener('click', async () => {
   setLanguage(DEFAULT_SETTINGS.language);
@@ -331,20 +323,6 @@ settingsResetBtn.addEventListener('click', async () => {
     settingsStatus.textContent = i18n.t('options_status_restore_failed');
   } finally {
     settingsResetBtn.disabled = false;
-  }
-});
-
-experimentalSaveBtn.addEventListener('click', async () => {
-  const next = readSettingsFromForm();
-  currentGlobal = next;
-  experimentalSaveBtn.disabled = true;
-  try {
-    await persistGlobalSettings(next);
-    experimentalStatus.textContent = i18n.t('options_status_experimental_saved_at', [new Date().toLocaleTimeString()]);
-  } catch {
-    experimentalStatus.textContent = i18n.t('options_status_experimental_save_failed');
-  } finally {
-    experimentalSaveBtn.disabled = false;
   }
 });
 
@@ -386,67 +364,30 @@ async function renderSavedSites() {
     sitesClearAllBtn.disabled = false;
 
     function makeChipsForProfile(data: Partial<Settings>): HTMLElement[] {
-      const chips: HTMLElement[] = [];
+      const labels: string[] = [];
       const normalized = normalizeSettings(data);
-      if (data.zoomApplied === false) {
-        const chip = document.createElement('span');
-        chip.className = 'site-chip';
-        chip.textContent = `${i18n.t('common_zoom')}: ${i18n.t('common_off')}`;
-        chips.push(chip);
-      } else {
-        if (data.zoomType === 'quick') {
-          const chip = document.createElement('span');
-          chip.className = 'site-chip';
-          chip.textContent = `Mode: ${(data.mode || 'fit').toUpperCase()}`;
-          chips.push(chip);
-        } else if (data.zoomStrategy === 'automatic') {
-          const chip = document.createElement('span');
-          chip.className = 'site-chip';
-          chip.textContent = i18n.t('options_sites_strategy_screen');
-          chips.push(chip);
-        } else if (data.zoom !== undefined) {
-          const chip = document.createElement('span');
-          chip.className = 'site-chip';
-          chip.textContent = `${i18n.t('common_zoom')}: ${(data.zoom * 100).toFixed(0)}%`;
-          chips.push(chip);
-        }
-      }
+      if (data.zoomApplied === false) labels.push(`${i18n.t('common_zoom')}: ${i18n.t('common_off')}`);
+      else if (data.zoomType === 'quick') labels.push(`Mode: ${(data.mode || 'fit').toUpperCase()}`);
+      else if (data.zoomStrategy === 'automatic') labels.push(i18n.t('options_sites_strategy_screen'));
+      else if (data.zoom !== undefined) labels.push(`${i18n.t('common_zoom')}: ${(data.zoom * 100).toFixed(0)}%`);
 
       if (data.ambience && data.ambience !== 'off') {
-        const chip = document.createElement('span');
-        chip.className = 'site-chip';
-        chip.textContent = `${i18n.t('common_ambience')}: ${normalized.ambience === 'colour' ? i18n.t('common_colour') : i18n.t('common_blur')}`;
-        chips.push(chip);
+        labels.push(`${i18n.t('common_ambience')}: ${normalized.ambience === 'colour' ? i18n.t('common_colour') : i18n.t('common_blur')}`);
         if (data.ambienceRate) {
-          const rateChip = document.createElement('span');
-          rateChip.className = 'site-chip';
           const rateLabel = normalized.ambienceRate === 'performance' ? i18n.t('common_performance') : normalized.ambienceRate === 'quality' ? i18n.t('common_quality') : i18n.t('common_default');
-          rateChip.textContent = `Rate: ${rateLabel}`;
-          chips.push(rateChip);
+          labels.push(`Rate: ${rateLabel}`);
         }
-        if (data.ambienceFillBars) {
-          const fillChip = document.createElement('span');
-          fillChip.className = 'site-chip';
-          fillChip.textContent = i18n.t('controls_fill_bars');
-          chips.push(fillChip);
-        }
+        if (data.ambienceFillBars) labels.push(i18n.t('controls_fill_bars'));
       }
+      if (data.autoCrop) labels.push(`Auto Crop: ${i18n.t('common_on')}`);
+      if (data.controlMode) labels.push(`Controls: ${data.controlMode}`);
 
-      if (data.autoCrop) {
+      return labels.map(text => {
         const chip = document.createElement('span');
         chip.className = 'site-chip';
-        chip.textContent = `Auto Crop: ${i18n.t('common_on')}`;
-        chips.push(chip);
-      }
-
-      if (data.controlMode) {
-        const chip = document.createElement('span');
-        chip.className = 'site-chip';
-        chip.textContent = `Controls: ${data.controlMode}`;
-        chips.push(chip);
-      }
-
-      return chips;
+        chip.textContent = text;
+        return chip;
+      });
     }
 
     for (const [host, site] of entries) {

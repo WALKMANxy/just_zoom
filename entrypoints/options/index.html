@@ -150,11 +150,20 @@
         </fieldset>
         <p class="hint experiment-hint" data-i18n="controls_rate_hint">Default balances speed and workload; Performance uses fewer updates; Quality updates fastest.</p>
 
-        <label class="check">
-          <input type="checkbox" id="setting-ambienceFillBars">
-          <span data-i18n="controls_fill_bars">Fill black bars</span>
-        </label>
+        <fieldset class="experiment-group">
+          <legend data-i18n="controls_fill_bars">Fill black bars</legend>
+          <div class="experiment-segments" id="setting-ambienceFillBars">
+            <button type="button" data-value="off" data-i18n="common_off">Off</button>
+            <button type="button" data-value="on" data-i18n="common_on">On</button>
+          </div>
+        </fieldset>
         <p class="hint experiment-hint" data-i18n="controls_fill_bars_hint">Paints Ambience into black bars baked into the video (letterbox or pillarbox). The picture itself is never covered.</p>
+
+        <label class="check">
+          <input type="checkbox" id="setting-drmWorkaround">
+          <span data-i18n="controls_drm_workaround">Enable experimental DRM workaround</span>
+        </label>
+        <p class="hint experiment-hint" data-i18n="controls_drm_workaround_hint">Uses local tab screenshots for protected video; only works while the tab is focused.</p>
       </article>
 
       <!-- Card: Multi-Monitor & Display Profiles -->
