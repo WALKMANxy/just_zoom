@@ -7,6 +7,7 @@ import { automaticZoomFactor, portraitBlocked } from './eligibility';
 import { createCueOverlay, type CueOverlayController } from './cue-overlay';
 import { pictureBox } from '../features/bar-fill';
 import { ownedClips } from '../shared/bar-clip';
+import { reducedMotion } from '../shared/motion';
 
 interface OwnedStyle { original: string; priority: string; written: string; writtenPriority: string; requested: string }
 export class TransformEngine {
@@ -127,7 +128,7 @@ export class TransformEngine {
   private animationsAllowed() {
     return this.settings?.animations === true && this.binding.adapter !== 'Netflix'
       && !/(^|\.)netflix\.com$/.test(location.hostname)
-      && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      && !reducedMotion();
   }
   private geometryDependent() {
     // Fixed manual zoom factors remain constant across viewport resize/fullscreen.
