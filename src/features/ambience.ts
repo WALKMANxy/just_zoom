@@ -1,5 +1,6 @@
 import type { Crop, PlayerBinding, Settings } from '../shared/types';
 import { debugCount, debugState } from '../shared/debug';
+import { reducedMotion } from '../shared/motion';
 
 const W = 192, H = 108;
 // Each new sample starts a near-linear cross-fade from what is on screen now to the new
@@ -10,7 +11,8 @@ const W = 192, H = 108;
 const MORPH_MIN = 450, MORPH_DIRECT_MIN = 300, MORPH_MAX = 1800, MORPH_CUT = 380, MORPH_REDUCED = 300, MORPH_FRAME = 30;
 const GAP_IGNORE = 2500, PROBE_EVERY = 100;
 const CUT_DIFF = 48; // mean absolute 0-255 channel difference over an 8x6 grid
-const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Low-rate morphs skip frames that could not change any pixel by a full 8-bit level.
+const RANGE_W = 48, RANGE_H = 27, RANGE_MARGIN = 2;
 
 export class AmbienceRenderer {
   private canvas: HTMLCanvasElement | null = null;
@@ -30,6 +32,10 @@ export class AmbienceRenderer {
   private morphDuration = 0;
   private morphCut = false;
   private morphDrawn = 0;
+  // Largest channel difference between `from` and `next` (with margin), -1 when unknown.
+  private morphRange = -1;
+  private morphK = 0;
+  private rangeProbe: HTMLCanvasElement | null = null;
   private raf = 0;
   private gap = -1;
   private lastSample = 0;
@@ -62,7 +68,7 @@ export class AmbienceRenderer {
       // resize, play/pause), and rewriting styles there only produced style mutations.
       this.canvas.style.filter = 'none';
       this.canvas.style.transform = 'scale(1.25)';
-      this.canvas.style.transition = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'none' : 'opacity 180ms ease';
+      this.canvas.style.transition = reducedMotion() ? 'none' : 'opacity 180ms ease';
       host.prepend(this.canvas);
     }
   }
@@ -108,6 +114,8 @@ export class AmbienceRenderer {
     this.morphCut = cut && !reduced;
     this.morphDuration = reduced ? MORPH_REDUCED : cut ? Math.min(MORPH_CUT, glide * .66) : glide;
     this.morphStart = performance.now();
+    this.morphK = 0;
+    this.morphRange = lowRate && !this.morphCut && !reduced ? this.range() : -1;
     debugState({ ambienceMorph: reduced ? 'fade' : cut ? 'cut' : 'morph', ambienceMorphPath: lowRate ? 'low-rate' : 'direct', ambienceMorphMs: Math.round(this.morphDuration), ambienceGapMs: Math.round(gap) });
     if (!this.raf) this.raf = requestAnimationFrame(this.step);
   }
@@ -155,6 +163,10 @@ export class AmbienceRenderer {
     // Steady morph: mostly linear so the colour keeps moving at an even speed across
     // sample boundaries, with a slightly soft start. Scene cut: quick ease-out.
     const k = this.morphCut ? 1 - (1 - t) ** 3 : t * t * (3 - 2 * t) * .35 + t * .65;
+    // A blurred low-rate field often differs by only a few levels: frames that move no pixel
+    // by a full level would draw the same image, so wait for one that does (or the end).
+    if (t < 1 && this.morphRange >= 0 && (k - this.morphK) * this.morphRange < 1) { this.raf = requestAnimationFrame(this.step); return; }
+    this.morphK = k;
     ctx.globalAlpha = 1; ctx.drawImage(this.from, 0, 0);
     ctx.globalAlpha = k; ctx.drawImage(this.next, 0, 0);
     ctx.globalAlpha = 1;
@@ -163,6 +175,23 @@ export class AmbienceRenderer {
     if (t < 1) this.raf = requestAnimationFrame(this.step);
     else debugState({ ambienceMorph: 'settled' });
   };
+  /** Max channel difference between the morph endpoints on a coarse grid, scaled up as a safety margin; -1 if unreadable. */
+  private range(): number {
+    if (!this.from || !this.next) return -1;
+    try {
+      this.rangeProbe ??= Object.assign(document.createElement('canvas'), { width: RANGE_W * 2, height: RANGE_H });
+      const pctx = this.rangeProbe.getContext('2d', { willReadFrequently: true });
+      if (!pctx) return -1;
+      pctx.drawImage(this.from, 0, 0, RANGE_W, RANGE_H); pctx.drawImage(this.next, RANGE_W, 0, RANGE_W, RANGE_H);
+      const data = pctx.getImageData(0, 0, RANGE_W * 2, RANGE_H).data;
+      let max = 0;
+      for (let y = 0; y < RANGE_H; y++) for (let x = 0; x < RANGE_W; x++) {
+        const a = (y * RANGE_W * 2 + x) * 4, b = a + RANGE_W * 4;
+        max = Math.max(max, Math.abs(data[a]! - data[b]!), Math.abs(data[a + 1]! - data[b + 1]!), Math.abs(data[a + 2]! - data[b + 2]!));
+      }
+      return max * RANGE_MARGIN;
+    } catch { return -1; }
+  }
   /** Cheap scene-cut test on an 8x6 average-colour grid; false when pixels are unreadable. */
   private sceneCut(source: CanvasImageSource, w: number, h: number, crop: Crop, now: number): boolean {
     // Direct samples arrive up to 25x/s; probing every ~100 ms still catches cuts (vs the older probe).
@@ -191,8 +220,8 @@ export class AmbienceRenderer {
   private stopMorph(): void { if (this.raf) cancelAnimationFrame(this.raf); this.raf = 0; }
   dispose(): void {
     this.stopMorph(); this.lastSample = 0; this.probeLast = null; this.probeAt = 0; this.gap = -1;
-    for (const c of [this.from, this.next, this.probe]) if (c) c.width = c.height = 0;
-    this.from = this.next = this.probe = null;
+    for (const c of [this.from, this.next, this.probe, this.rangeProbe, this.canvas]) if (c) c.width = c.height = 0;
+    this.from = this.next = this.probe = this.rangeProbe = null; this.morphRange = -1;
     this.canvas?.remove(); this.canvas = null; this.ctx = null; this.lastFrame = 0;
     if (this.stage) this.stage.width = this.stage.height = 0;
     this.stage = null; this.stageCtx = null;

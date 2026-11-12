@@ -35,6 +35,7 @@ export class FrameSource {
   private probe: HTMLCanvasElement | null = null;
   private probeCtx: CanvasRenderingContext2D | null = null;
   private strip: HTMLCanvasElement | null = null;
+  private stripValues: Uint8Array | null = null;
   private stripCtx: CanvasRenderingContext2D | null = null;
   private lastProbe = -Infinity;
   private protectedMode = false;
@@ -214,7 +215,8 @@ export class FrameSource {
       ctx.imageSmoothingEnabled = false;
       if (horizontal) ctx.drawImage(source, x + offset, near, span, count, 0, 0, cw, ch);
       else ctx.drawImage(source, near, y + offset, count, span, 0, 0, cw, ch);
-      const data = ctx.getImageData(0, 0, cw, ch).data, medians = new Uint8Array(count), values = new Uint8Array(along);
+      // `medians` leaves with the strip; the per-row scratch buffer is reused.
+      const data = ctx.getImageData(0, 0, cw, ch).data, medians = new Uint8Array(count), values = this.stripValues ??= new Uint8Array(along);
       for (let i = 0; i < count; i++) {
         // Index from the outer edge inward.
         const line = request.edge === 'top' || request.edge === 'left' ? i : count - 1 - i;

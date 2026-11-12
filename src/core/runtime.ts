@@ -69,6 +69,7 @@ export function startRuntime(): () => void {
     geometryObserver = new ResizeObserver(() => {
       debugCount('geometryResize');
       checkEligibility();
+      queueReport();
     });
     geometryObserver.observe(target.viewport);
     geometryObserver.observe(target.video);
@@ -400,6 +401,9 @@ export function startRuntime(): () => void {
     binding.video.removeEventListener('loadedmetadata', sourceChanged);
     binding.video.removeEventListener('emptied', sourceChanged);
     binding.video.removeEventListener('resize', checkEligibility);
+    binding.video.removeEventListener('play', queueReport);
+    binding.video.removeEventListener('pause', queueReport);
+    visibilityObserver?.disconnect(); visibilityObserver = null;
     gestures?.dispose(); gestures = null;
     hud?.dispose(); hud = null;
     effects?.dispose(); transform?.dispose(); controls?.dispose();
@@ -414,6 +418,12 @@ export function startRuntime(): () => void {
   let observedDisneyRoots: ShadowRoot[] = [];
   let poll = 0;
   let reportTimer = 0;
+  let visibilityObserver: IntersectionObserver | null = null;
+  // The poll's full rediscovery backs off while the binding stays put; relevant events
+  // (mutations, play, fullscreen, resize, navigation, rebind) reset it to the fast rate.
+  const DISCOVER_BACKOFF = [1500, 5000, 15000];
+  let discoverStep = 0, lastPollDiscover = 0;
+  const resetBackoff = () => { discoverStep = 0; lastPollDiscover = performance.now(); };
   let unsubscribe: (() => void) | null = null;
   let removeShortcuts: (() => void) | null = null;
 
@@ -440,14 +450,18 @@ export function startRuntime(): () => void {
       if (dormantHosts.size) scheduleDormantRecheck(step + 1);
     }, delays[step]);
   };
+  // Live collection: its length is a cheap per-batch test for any light-DOM <video>.
+  const lightVideos = document.getElementsByTagName('video');
   const armDormant = () => {
     if (disposed || isActive || dormantObserver) return;
     dormantObserver = new MutationObserver(records => {
       if (!isContextValid() || disposed || isActive || !isNotExcludedURL()) return;
       let pending = false;
+      // With no light-DOM <video> at all, no added subtree can hold one; shadow hosts still can.
+      const lightVideo = lightVideos.length > 0;
       for (const record of records) {
         for (const node of record.addedNodes) {
-          if (node instanceof HTMLVideoElement || (node instanceof Element && (node.querySelector('video') || node.shadowRoot?.querySelector('video')))) {
+          if (node instanceof HTMLVideoElement || (node instanceof Element && ((lightVideo && node.querySelector('video')) || node.shadowRoot?.querySelector('video')))) {
             cancelDormantRecheck();
             wakeUp();
             return;
@@ -488,7 +502,7 @@ export function startRuntime(): () => void {
     ready = false;
     readyPromise = null;
     if (poll) { clearInterval(poll); poll = 0; }
-    if (reportTimer) { clearInterval(reportTimer); reportTimer = 0; }
+    if (reportTimer) { clearTimeout(reportTimer); reportTimer = 0; }
     if (scheduled) { clearTimeout(scheduled); scheduled = 0; }
     if (siteSaveTimer) { clearTimeout(siteSaveTimer); siteSaveTimer = 0; }
     activeObserver?.disconnect(); activeObserver = null;
@@ -541,24 +555,26 @@ export function startRuntime(): () => void {
     const targetNode = document.body ?? document.documentElement;
     activeObserver = new MutationObserver(records => {
       if (document.hidden || !isContextValid() || disposed || !isActive) return;
-      if (records.some(relevantMutation)) schedule();
+      if (records.some(relevantMutation)) { resetBackoff(); schedule(); }
     });
     if (targetNode) activeObserver.observe(targetNode, { childList: true, subtree: true });
     syncDisneyControlObserver();
 
+    // Cheap work every tick. A full selectVideo/bindPlayer pass runs while unbound, when a
+    // bound node left the DOM, or on the backed-off schedule (1.5 → 5 → 15 s) once stable.
+    resetBackoff();
     poll = window.setInterval(() => {
       if (!isContextValid()) { teardown(); return; }
       if (!document.hidden && isActive) {
         checkScreenChange();
         transform?.refresh();
-        schedule();
+        const now = performance.now();
+        if (!binding || !binding.video.isConnected || !binding.viewport.isConnected) { resetBackoff(); schedule(); }
+        else if (now - lastPollDiscover >= DISCOVER_BACKOFF[Math.min(discoverStep, DISCOVER_BACKOFF.length - 1)]! - 100) {
+          lastPollDiscover = now; discoverStep++; schedule();
+        }
       }
     }, 1500);
-
-    reportTimer = window.setInterval(() => {
-      if (!isContextValid()) { teardown(); return; }
-      if (!document.hidden && isActive && binding) report();
-    }, 5000);
 
     removeShortcuts = attachShortcuts(value => {
       if (!isActive) wakeUp();
@@ -598,6 +614,7 @@ export function startRuntime(): () => void {
         return;
       }
       binding = fresh;
+      resetBackoff();
       if (viewportChanged) {
         nativePlayer?.rebind(fresh);
         transform?.rebind(fresh);
@@ -634,6 +651,12 @@ export function startRuntime(): () => void {
     // Intrinsic size can flip portrait/landscape mid-stream without a box resize or new
     // metadata; the discovery poll no longer re-runs update() to catch it.
     next.video.addEventListener('resize', checkEligibility);
+    // The worker ranks frames by visible area and playback state; report when those change.
+    next.video.addEventListener('play', queueReport);
+    next.video.addEventListener('pause', queueReport);
+    visibilityObserver = new IntersectionObserver(queueReport, { threshold: [0, .25, .5, .75, 1] });
+    visibilityObserver.observe(next.video);
+    resetBackoff();
     status = { source: 'idle', message: i18n.t('status_manual_available') };
     controls = createControls(next, { patch, reset, resetPan, action, activate,
       saveSite: () => { void save('site', true); },
@@ -698,14 +721,24 @@ export function startRuntime(): () => void {
   };
 
   let lastReportedAvailable = false;
-  const report = () => {
+  // Reports go out only when availability or the coarse score (half-octaves of visible area,
+  // playing vs paused) changes, so an idle tab never keeps the service worker alive.
+  let lastReportKey = '';
+  const queueReport = () => {
+    if (reportTimer || disposed || !isActive) return;
+    reportTimer = window.setTimeout(() => { reportTimer = 0; report(); }, 250);
+  };
+  const report = (force = false) => {
     if (disposed || !isContextValid() || !isActive) return;
     const isAvailable = Boolean(binding && !disposed);
     if (!isAvailable && !lastReportedAvailable) return;
-    lastReportedAvailable = isAvailable;
     try {
       const rect = binding?.video.getBoundingClientRect();
       const area = rect ? Math.max(0, Math.min(rect.right, innerWidth) - Math.max(0, rect.left)) * Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(0, rect.top)) : 0;
+      const key = binding ? `${binding.video.paused ? 'p' : 'r'}${Math.round(Math.log2(area + 1) * 2)}` : 'off';
+      if (!force && key === lastReportKey) return;
+      lastReportKey = key;
+      lastReportedAvailable = isAvailable;
       void chrome.runtime.sendMessage({
         type: 'JZ_FRAME_STATUS',
         available: isAvailable,
@@ -727,7 +760,7 @@ export function startRuntime(): () => void {
   const onPlay = () => {
     if (!isContextValid() || disposed) return;
     if (!isActive) { if (isNotExcludedURL()) wakeUp(); }
-    else schedule();
+    else { resetBackoff(); schedule(); }
   };
 
   // An unbound player often becomes eligible only once media data arrives (intrinsic
@@ -744,9 +777,11 @@ export function startRuntime(): () => void {
       if (!isActive) {
         if (document.querySelector('video')) wakeUp();
       } else {
+        resetBackoff();
         discover();
         transform?.refresh();
-        if (binding) report();
+        // Forced: a worker restart or tab reload may have dropped this frame's entry.
+        if (binding) report(true);
       }
     }
   };
@@ -755,7 +790,7 @@ export function startRuntime(): () => void {
     if (!isContextValid() || disposed) return;
     debugCount('fullscreenchange'); debugLog('fullscreenchange', document.fullscreenElement?.tagName ?? null);
     debugState({ fullscreen: document.fullscreenElement?.tagName ?? null });
-    if (isActive) schedule();
+    if (isActive) { resetBackoff(); schedule(); queueReport(); }
     else if (document.querySelector('video')) wakeUp();
   };
 
@@ -764,7 +799,9 @@ export function startRuntime(): () => void {
     debugCount('windowResize');
     if (isActive && !document.hidden) {
       checkScreenChange();
+      resetBackoff();
       schedule();
+      queueReport();
     }
   };
 
@@ -829,7 +866,11 @@ export function startRuntime(): () => void {
     if (!isActive) {
       if (document.querySelector('video') && isNotExcludedURL()) wakeUp();
     } else {
+      resetBackoff();
       schedule();
+      // A navigation can reset the worker's entries for this tab: report again once settled.
+      lastReportKey = '';
+      queueReport();
     }
   };
   window.addEventListener('popstate', onNavigate);
@@ -855,7 +896,7 @@ export function startRuntime(): () => void {
     clearTimeout(siteSaveTimer); siteSaveTimer = 0;
     resetMiss();
     if (poll) { clearInterval(poll); poll = 0; }
-    if (reportTimer) { clearInterval(reportTimer); reportTimer = 0; }
+    if (reportTimer) { clearTimeout(reportTimer); reportTimer = 0; }
     dormantObserver?.disconnect(); dormantObserver = null; cancelDormantRecheck();
     activeObserver?.disconnect(); activeObserver = null;
     disneyObserver?.disconnect(); disneyObserver = null; observedDisneyRoots = [];

@@ -38,17 +38,26 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   let bar: HTMLElement | null = null, barTimer = 0;
   const barMutations = new MutationObserver(() => onBarChange());
   const barResize = new ResizeObserver(() => onBarChange());
-  // The page's own ::cue rules, re-read on cuechange and <head> changes.
+  // The page's own ::cue rules. Scanning the CSSOM is costly, so the result is cached and
+  // re-read after a (debounced) <head> change, when the sheet count changes, or on a
+  // cuechange once the cache is older than RULES_MAX_AGE (catches pure CSSOM rewrites).
   let pageStyle: HTMLStyleElement | null = null, cueRules: CueRules = { signature: '', decls: [] }, appliedCss = '';
-  const headObserver = new MutationObserver(() => { if (refreshStyle()) schedule(); });
+  let rulesReadAt = -Infinity, rulesSheets = -1, headTimer = 0;
+  const RULES_MAX_AGE = 5000;
+  const headObserver = new MutationObserver(() => {
+    clearTimeout(headTimer);
+    headTimer = window.setTimeout(() => { headTimer = 0; if (!disposed && host && refreshStyle()) schedule(); }, 500);
+  });
   const refreshStyle = () => {
+    rulesReadAt = performance.now(); rulesSheets = document.styleSheets.length;
     const next = readCueRules(video);
     if (next.signature === cueRules.signature) return false;
     cueRules = next; appliedCss = '';
     return true;
   };
+  const rulesStale = () => document.styleSheets.length !== rulesSheets || performance.now() - rulesReadAt >= RULES_MAX_AGE;
 
-  const onCueChange = () => { try { if (refreshStyle()) schedule(); render(); } catch (error) { debugLog('cueOverlay', String(error)); } };
+  const onCueChange = () => { try { if (rulesStale() && refreshStyle()) schedule(); render(); } catch (error) { debugLog('cueOverlay', String(error)); } };
 
   const takeOver = (track: TextTrack) => {
     if (yielded.has(track)) return;
@@ -76,7 +85,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
   const releaseAll = () => {
     for (const track of [...owned.keys()]) release(track);
     host?.remove(); host = box = pageStyle = null; appliedCss = '';
-    headObserver.disconnect();
+    headObserver.disconnect(); clearTimeout(headTimer); headTimer = 0;
     watchBar(null);
   };
 
@@ -131,7 +140,8 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
       pageStyle = document.createElement('style');
       shadow.append(style, pageStyle, box);
       refreshStyle();
-      if (document.head) headObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
+      // A <style> rewrite through textContent replaces its text node (childList); characterData isn't needed.
+      if (document.head) headObserver.observe(document.head, { childList: true, subtree: true });
     }
     // A sibling right after the video paints above it but below later player
     // controls, and is inside whatever element the site fullscreens.
@@ -218,7 +228,7 @@ export function createCueOverlay(getBinding: () => PlayerBinding): CueOverlayCon
         // The page or user turned it off: stop drawing, keep their choice.
         else if (track.mode === 'disabled' && owned.has(track)) release(track, false);
       }
-      if (!owned.size) { host?.remove(); host = box = pageStyle = null; appliedCss = ''; headObserver.disconnect(); watchBar(null); return; }
+      if (!owned.size) { host?.remove(); host = box = pageStyle = null; appliedCss = ''; headObserver.disconnect(); clearTimeout(headTimer); headTimer = 0; watchBar(null); return; }
       if (!host) needsRender = true;
       if (!mount()) { releaseAll(); return; }
       watchBar(cueControlsElement(video));

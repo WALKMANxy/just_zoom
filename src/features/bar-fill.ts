@@ -1,4 +1,5 @@
 import { EMPTY_CROP, type Crop, type PlayerBinding } from '../shared/types';
+import { reducedMotion } from '../shared/motion';
 
 export const hasBars = (crop: Crop) => Object.values(crop).some(value => value > .001);
 // Mirrored from the video so zoom/pan (scale/translate written by the transform engine) moves the fill with the picture.
@@ -32,7 +33,18 @@ export class BarFill {
   private held = false;
   private mutations: MutationObserver | null = null;
   private resize: ResizeObserver | null = null;
+  private backdrop: HTMLCanvasElement | null = null;
+  // Last value written per element and property: unchanged layout writes nothing.
+  private written = new WeakMap<HTMLElement, Record<string, string>>();
+  // Morph frames remap only while a mirrored transform/transition may still be moving the layer.
+  private remapUntil = 0;
   constructor(private readonly binding: PlayerBinding) {}
+  private set(el: HTMLElement, property: string, value: string): void {
+    let cache = this.written.get(el);
+    if (!cache) this.written.set(el, cache = {});
+    if (cache[property] === value) return;
+    cache[property] = value; el.style.setProperty(property, value);
+  }
   /** True while bar regions are actually covered on screen. */
   get visible(): boolean { return this.shown && this.placed; }
   /** False when the video's box can't be mirrored (unsupported object-fit/position); nothing is painted then. */
@@ -49,12 +61,15 @@ export class BarFill {
   paint(backdrop: HTMLCanvasElement | null): void {
     if (!backdrop || !this.ctx || !hasBars(this.bars)) return;
     this.ctx.drawImage(backdrop, 0, 0, 192, 108);
-    this.sync(); this.map(backdrop);
+    // sync() also remaps; both diff against what they last wrote.
+    this.backdrop = backdrop; this.sync();
     if (!this.painted) { this.painted = true; this.apply(); }
   }
-  /** Cheap per-frame copy while the backdrop morphs between samples; layout is synced by paint(). */
+  /** Cheap per-frame copy while the backdrop morphs between samples; layout is synced by paint() and the observers. */
   repaint(backdrop: HTMLCanvasElement | null): void {
-    if (backdrop && this.ctx && this.painted && hasBars(this.bars)) { this.ctx.drawImage(backdrop, 0, 0, 192, 108); this.map(backdrop); }
+    if (!backdrop || !this.ctx || !this.painted || !hasBars(this.bars)) return;
+    this.ctx.drawImage(backdrop, 0, 0, 192, 108);
+    if (performance.now() < this.remapUntil) { this.backdrop = backdrop; this.map(backdrop); }
   }
   /** Hide without a fade so the next screenshot sees the real bars (protected-video re-check). */
   hold(held: boolean): void {
@@ -76,7 +91,11 @@ export class BarFill {
     const cover = Math.max(box.width / backdrop.width, box.height / backdrop.height);
     const cw = backdrop.width * cover, ch = backdrop.height * cover;
     const left = box.left + (box.width - cw) / 2, top = box.top + (box.height - ch) / 2;
-    Object.assign(canvas.style, { inset: 'auto', left: `${(left - fr.left) / k}px`, top: `${(top - fr.top) / k}px`, width: `${cw / k}px`, height: `${ch / k}px` });
+    // Sub-pixel jitter in the rects would defeat the diff; 1/100 px is far below visible.
+    const px = (value: number) => `${Math.round(value * 100) / 100}px`;
+    this.set(canvas, 'inset', 'auto');
+    this.set(canvas, 'left', px((left - fr.left) / k)); this.set(canvas, 'top', px((top - fr.top) / k));
+    this.set(canvas, 'width', px(cw / k)); this.set(canvas, 'height', px(ch / k));
   }
   private create(): boolean {
     const video = this.binding.video;
@@ -93,26 +112,33 @@ export class BarFill {
     this.ctx = canvas.getContext('2d');
     video.after(host);
     this.host = host; this.frame = frame;
-    this.mutations = new MutationObserver(this.sync);
+    // A video style/class write is how zoom/pan arrive: remap on morph frames while it animates.
+    this.mutations = new MutationObserver(() => { this.remapUntil = performance.now() + 1000; this.sync(); });
     this.mutations.observe(video, { attributes: true, attributeFilter: ['style', 'class'] });
     this.resize = new ResizeObserver(this.sync); this.resize.observe(video);
+    if (this.binding.viewport !== video) this.resize.observe(this.binding.viewport);
     return true;
   }
   private sync = (): void => {
     const host = this.host, frame = this.frame, video = this.binding.video;
     if (!host || !frame) return;
+    // All reads first, then only the writes whose value changed.
     const cs = getComputedStyle(video);
     const box = pictureBox(cs, video.offsetWidth, video.offsetHeight, video.videoWidth, video.videoHeight);
     // Offsets only map to our absolute position when both resolve against the same containing block.
     if (!box || cs.display === 'none' || cs.position === 'fixed' || !video.offsetParent || host.offsetParent && host.offsetParent !== video.offsetParent) {
-      host.style.display = 'none'; return;
+      this.set(host, 'display', 'none'); return;
     }
-    host.style.display = 'block';
-    Object.assign(host.style, { left: `${video.offsetLeft}px`, top: `${video.offsetTop}px`, width: `${video.offsetWidth}px`, height: `${video.offsetHeight}px`, zIndex: cs.zIndex });
+    const left = `${video.offsetLeft}px`, top = `${video.offsetTop}px`, width = `${video.offsetWidth}px`, height = `${video.offsetHeight}px`, zIndex = cs.zIndex;
     // Inline values are the transform engine's targets; computed values would be mid-transition.
-    for (const property of MIRRORED) host.style.setProperty(property, video.style.getPropertyValue(property) || cs.getPropertyValue(property));
-    if (host.offsetParent && host.offsetParent !== video.offsetParent) { host.style.display = 'none'; return; }
-    Object.assign(frame.style, { left: `${box.x}px`, top: `${box.y}px`, width: `${box.w}px`, height: `${box.h}px` });
+    const mirrored = MIRRORED.map(property => video.style.getPropertyValue(property) || cs.getPropertyValue(property));
+    this.set(host, 'display', 'block');
+    this.set(host, 'left', left); this.set(host, 'top', top); this.set(host, 'width', width); this.set(host, 'height', height);
+    this.set(host, 'z-index', zIndex);
+    MIRRORED.forEach((property, i) => this.set(host, property, mirrored[i]!));
+    if (host.offsetParent && host.offsetParent !== video.offsetParent) { this.set(host, 'display', 'none'); return; }
+    this.set(frame, 'left', `${box.x}px`); this.set(frame, 'top', `${box.y}px`); this.set(frame, 'width', `${box.w}px`); this.set(frame, 'height', `${box.h}px`);
+    if (this.backdrop) this.map(this.backdrop);
   };
   private apply(): void {
     const frame = this.frame;
@@ -126,14 +152,17 @@ export class BarFill {
     if (on) {
       // Force the hidden state to commit so a fade-in after hold() still animates.
       void frame.offsetWidth;
-      frame.style.transition = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'none' : 'opacity 180ms ease';
+      frame.style.transition = reducedMotion() ? 'none' : 'opacity 180ms ease';
     }
     frame.style.opacity = on ? '1' : '0';
     this.shown = on;
   }
   dispose(): void {
     this.mutations?.disconnect(); this.resize?.disconnect(); this.mutations = null; this.resize = null;
-    this.host?.remove(); this.host = this.frame = null; this.ctx = null;
+    // Release the canvas backing store now rather than whenever the node is collected.
+    if (this.ctx) this.ctx.canvas.width = this.ctx.canvas.height = 0;
+    this.host?.remove(); this.host = this.frame = null; this.ctx = null; this.backdrop = null;
+    this.remapUntil = 0; // `written` is keyed by the removed nodes, so it needs no reset.
     this.bars = { ...EMPTY_CROP }; this.painted = false; this.shown = false; this.held = false;
   }
 }

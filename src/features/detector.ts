@@ -116,6 +116,8 @@ const BAR_WINDOW_FRAMES = 48;
 export class BarHistory {
   private frames: { at: number; content: boolean; rows: Record<Edge, Uint8Array> }[] = [];
   private size = '';
+  // Per-frame scratch; only the row profiles are kept in history.
+  private luma = new Uint8Array(0);
   diagnostics: BarDiagnostics = { reason: 'idle', centre: 0, frames: 0, content: 0, runs: { ...EMPTY_CROP }, inside: { ...EMPTY_CROP } };
   reset(): void { this.frames = []; this.size = ''; }
   observe(image: ImageData, now: number, quantised: boolean): Detection | null {
@@ -127,7 +129,8 @@ export class BarHistory {
     };
     if (w < 24 || h < 24) return finish('too-small', 0, null);
     if (this.size !== `${w}x${h}`) { this.reset(); this.size = `${w}x${h}`; }
-    const luma = new Uint8Array(w * h);
+    if (this.luma.length !== w * h) this.luma = new Uint8Array(w * h);
+    const luma = this.luma;
     for (let i = 0; i < luma.length; i++) luma[i] = .2126 * data[i * 4]! + .7152 * data[i * 4 + 1]! + .0722 * data[i * 4 + 2]!;
     let bright = 0, count = 0;
     for (let y = Math.floor(h * .3); y < h * .7; y++) for (let x = Math.floor(w * .3); x < w * .7; x++) { count++; if (luma[y * w + x]! > 32) bright++; }
