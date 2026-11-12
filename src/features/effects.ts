@@ -52,6 +52,11 @@ export class EffectsController {
   private clipSent = false;
   private sentinelLuma: Partial<Record<keyof Crop, number>> = {};
   private stripsRead = 0;
+  // applyFill() runs every sample tick; both checks are cached and invalidated by events.
+  private clipSafeCache: boolean | null = null;
+  private clipChain: MutationObserver | null = null;
+  private cuesShowing: boolean | null = null;
+  private cuesChanged = (): void => { this.cuesShowing = null; };
   constructor(private readonly binding: PlayerBinding, private readonly onCrop: (crop: Crop) => void, private readonly onStatus: (status: FeatureStatus) => void,
     private readonly onBarClip: (clip: Crop) => void = () => {}) {
     this.sourceUrl = binding.video.currentSrc;
@@ -60,11 +65,12 @@ export class EffectsController {
     this.ambience.onFrame = () => this.barFill.repaint(this.ambience.backdrop);
     this.observer = new IntersectionObserver(entries => { this.intersection = entries.some(entry => entry.isIntersecting); this.wake(); });
     this.observer.observe(binding.video);
-    this.resize = new ResizeObserver(() => this.wake()); this.resize.observe(binding.viewport);
+    this.resize = new ResizeObserver(() => { this.clipSafeCache = null; this.wake(); }); this.resize.observe(binding.viewport);
     for (const event of ['play', 'pause', 'seeked']) binding.video.addEventListener(event, this.wake);
     for (const event of ['loadeddata', 'emptied']) binding.video.addEventListener(event, this.sourceChanged);
     binding.video.addEventListener('seeking', this.seeking);
     document.addEventListener('visibilitychange', this.wake); document.addEventListener('fullscreenchange', this.wake);
+    for (const event of ['change', 'addtrack', 'removetrack']) binding.video.textTracks.addEventListener(event, this.cuesChanged);
   }
   update(settings: Settings): void {
     settings = { ...settings, autoCrop: AUTO_CROP_AVAILABLE && settings.autoCrop };
@@ -128,18 +134,25 @@ export class EffectsController {
    * of the backdrop is painted over the bars with the same mapping.
    */
   private clipSafe(): boolean {
+    // Cached; a style/class write on the chain, a resize or any wake() recomputes it.
+    if (this.clipSafeCache !== null) return this.clipSafeCache;
     const { video, viewport } = this.binding;
     const opaque = (el: Element) => {
       const cs = getComputedStyle(el), alpha = /rgba\([^)]*,\s*([\d.]+)\)$/.exec(cs.backgroundColor);
       return cs.backgroundImage !== 'none' || cs.backgroundColor !== 'transparent' && (!alpha || Number(alpha[1]) > .05);
     };
-    if (opaque(video)) return false;
-    for (let el = video.parentElement; el !== viewport; el = el.parentElement) if (!el || opaque(el)) return false;
-    return true;
+    if (!this.clipChain) {
+      this.clipChain = new MutationObserver(() => { this.clipSafeCache = null; });
+      for (let el: Element | null = video; el && el !== viewport; el = el.parentElement) this.clipChain.observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
+    }
+    let safe = !opaque(video);
+    for (let el: Element | null = video.parentElement; safe && el !== viewport; el = el?.parentElement ?? null) if (!el || opaque(el)) safe = false;
+    return this.clipSafeCache = safe;
   }
   /** Native cues paint inside the video box (in the bottom bar), so neither fill mode may cover them. */
   private nativeCuesShowing(): boolean {
-    return Array.from(this.binding.video.textTracks).some(track => track.mode === 'showing' && (track.kind === 'subtitles' || track.kind === 'captions'));
+    // Mode changes fire `change` on the track list; cached between them.
+    return this.cuesShowing ??= Array.from(this.binding.video.textTracks).some(track => track.mode === 'showing' && (track.kind === 'subtitles' || track.kind === 'captions'));
   }
   private applyFill(): void {
     const region = this.barRegion();
@@ -254,7 +267,7 @@ export class EffectsController {
   private wake = (): void => {
     if (this.disposed) return;
     this.staticDone = false; this.generation++; this.source.invalidate();
-    this.sampledTime = -1;
+    this.sampledTime = -1; this.clipSafeCache = null; this.cuesShowing = null;
     this.ambience.update(this.settings.enabled ? this.settings.ambience : 'off');
     if (this.timer) clearTimeout(this.timer); this.timer = null;
     if (!this.busy) void this.tick();
@@ -331,6 +344,8 @@ export class EffectsController {
   dispose(): void {
     this.disposed = true; this.generation++; if (this.timer) clearTimeout(this.timer); this.timer = null;
     this.observer.disconnect(); this.resize.disconnect(); this.source.dispose(); this.ambience.dispose(); this.resetBars();
+    this.clipChain?.disconnect(); this.clipChain = null;
+    for (const event of ['change', 'addtrack', 'removetrack']) this.binding.video.textTracks.removeEventListener(event, this.cuesChanged);
     for (const event of ['play', 'pause', 'seeked']) this.binding.video.removeEventListener(event, this.wake);
     for (const event of ['loadeddata', 'emptied']) this.binding.video.removeEventListener(event, this.sourceChanged);
     this.binding.video.removeEventListener('seeking', this.seeking);
