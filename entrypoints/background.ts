@@ -8,6 +8,28 @@ export default defineBackground(() => {
   let storeQueue = Promise.resolve();
   let captureBusy = false;
   let lastCapture = 0;
+  // Frames report only when their status changes (no keep-alive interval), so the ranking
+  // must survive this worker idling out: mirror it to session storage and restore on start.
+  const FRAMES_KEY = 'jzFrames';
+  const restored = (async () => {
+    try {
+      const saved = (await chrome.storage.session?.get(FRAMES_KEY))?.[FRAMES_KEY] as Record<string, Record<string, { score: number; updated: number }>> | undefined;
+      for (const [tab, entries] of Object.entries(saved ?? {})) {
+        const tabFrames = frames.get(+tab) ?? new Map();
+        for (const [frame, entry] of Object.entries(entries)) if (!tabFrames.has(+frame)) tabFrames.set(+frame, entry);
+        frames.set(+tab, tabFrames);
+      }
+    } catch { /* Session storage unavailable: frames re-report on their next change. */ }
+  })();
+  let persistTimer: ReturnType<typeof setTimeout> | undefined;
+  const persistFrames = () => {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      const out: Record<string, Record<string, { score: number; updated: number }>> = {};
+      for (const [tab, tabFrames] of frames) if (tabFrames.size) out[tab] = Object.fromEntries(tabFrames);
+      void Promise.resolve(chrome.storage.session?.set({ [FRAMES_KEY]: out })).catch(() => {});
+    }, 100);
+  };
 
   function isScriptableUrl(url?: string): boolean {
     if (!url) return false;
@@ -18,13 +40,14 @@ export default defineBackground(() => {
   async function target(): Promise<{ tabId: number; frameId: number; state: RuntimeSnapshot } | null> {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
     if (!tab?.id || !isScriptableUrl(tab.url)) return null;
+    await restored;
     const candidates = [...(frames.get(tab.id)?.entries() ?? [])]
       .sort((a, b) => b[1].score - a[1].score);
     for (const [frameId] of candidates) {
       try {
         const state = await chrome.tabs.sendMessage(tab.id, { type: 'JZ_GET_STATE' }, { frameId }) as RuntimeSnapshot;
         if (state?.available) return { tabId: tab.id, frameId, state };
-      } catch { frames.get(tab.id)?.delete(frameId); }
+      } catch { frames.get(tab.id)?.delete(frameId); persistFrames(); }
     }
     // Top-frame fallback also covers newly attached runtimes before their first report, or after worker restart.
     // JZ_GET_STATE runs discovery there; a reachable page without a player is returned
@@ -34,7 +57,7 @@ export default defineBackground(() => {
       if (state?.available) {
         const tabFrames = frames.get(tab.id) ?? new Map();
         tabFrames.set(0, { score: 1000, updated: Date.now() });
-        frames.set(tab.id, tabFrames);
+        frames.set(tab.id, tabFrames); persistFrames();
       }
       if (state) return { tabId: tab.id, frameId: 0, state };
     } catch {
@@ -92,7 +115,7 @@ export default defineBackground(() => {
       if (message.available && typeof message.score === 'number' && Number.isFinite(message.score))
         tabFrames.set(sender.frameId ?? 0, { score: message.score, updated: Date.now() });
       else tabFrames.delete(sender.frameId ?? 0);
-      frames.set(sender.tab.id, tabFrames);
+      frames.set(sender.tab.id, tabFrames); persistFrames();
       respond({ ok: true }); return;
     }
     if (message.type === 'JZ_STORE_GLOBAL_PATCH') {
@@ -192,8 +215,8 @@ export default defineBackground(() => {
       return true;
     }
   });
-  chrome.tabs.onRemoved.addListener(id => frames.delete(id));
-  chrome.tabs.onUpdated.addListener((id, info) => { if (info.status === 'loading') frames.delete(id); });
+  chrome.tabs.onRemoved.addListener(id => { if (frames.delete(id)) persistFrames(); });
+  chrome.tabs.onUpdated.addListener((id, info) => { if (info.status === 'loading' && frames.delete(id)) persistFrames(); });
   chrome.commands.onCommand.addListener(command => {
     void target().then(t => {
       if (t?.state.available) chrome.tabs.sendMessage(t.tabId, { type: 'JZ_ACTION', action: command }, { frameId: t.frameId });
