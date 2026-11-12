@@ -11,7 +11,7 @@ const AMBIENCE_INTERVAL: Record<Settings['ambienceRate'], number> = { performanc
 // Settings the effects pipeline reads. Framing (zoom/pan/mode) changes neither the sampled
 // frame nor the backdrop, so it must not restart sampling on every gesture step.
 // If screenshot compatibility capture returns, its detectorSafe check reads framing too.
-const EFFECT_KEYS = ['enabled', 'ambience', 'ambienceRate', 'ambienceFillBars', 'autoCrop', 'compatibility'] as const;
+const EFFECT_KEYS = ['enabled', 'ambience', 'ambienceRate', 'ambienceFillBars', 'drmWorkaround', 'autoCrop', 'compatibility'] as const;
 
 export class EffectsController {
   private settings: Settings = { ...DEFAULT_SETTINGS };
@@ -71,7 +71,7 @@ export class EffectsController {
     const changed = !this.initialized || EFFECT_KEYS.some(key => this.settings[key] !== settings[key]);
     this.initialized = true;
     const autoChanged = this.settings.autoCrop !== settings.autoCrop;
-    if (this.settings.ambience !== settings.ambience) this.source.reset();
+    if (this.settings.ambience !== settings.ambience || this.settings.drmWorkaround !== settings.drmWorkaround) this.source.reset();
     this.settings = { ...settings };
     if (autoChanged) this.tracker.clearCandidate();
     this.ambience.update(settings.enabled ? settings.ambience : 'off');

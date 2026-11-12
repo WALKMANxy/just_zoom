@@ -52,6 +52,7 @@ export const SITE_PREFERENCE_KEYS: (keyof Settings)[] = [
   'buttonFactor',
   'allowPortrait',
   'rememberSiteState',
+  'drmWorkaround',
 ];
 export const GLOBAL_ONLY_KEYS = (Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[])
   .filter(key => !FRAMING_KEYS.includes(key) && !SITE_PREFERENCE_KEYS.includes(key));
@@ -92,6 +93,7 @@ export function normalizeSettings(value: Partial<Settings> | unknown, base: Sett
     ambienceRate: ['performance', 'high', 'quality'].includes(rate ?? '') ? rate as Settings['ambienceRate']
       : rate === 'low' ? 'performance' : base.ambienceRate,
     ambienceFillBars: typeof v.ambienceFillBars === 'boolean' ? v.ambienceFillBars : base.ambienceFillBars,
+    drmWorkaround: typeof v.drmWorkaround === 'boolean' ? v.drmWorkaround : base.drmWorkaround,
     compatibility: typeof v.compatibility === 'boolean' ? v.compatibility : base.compatibility,
     rememberSiteState: typeof v.rememberSiteState === 'boolean' ? v.rememberSiteState : base.rememberSiteState,
     videoFinderMode: v.videoFinderMode === 'bruteforce' ? 'bruteforce' : (v.videoFinderMode === 'treewalker' ? 'treewalker' : base.videoFinderMode),

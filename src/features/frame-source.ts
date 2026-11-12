@@ -176,7 +176,7 @@ export class FrameSource {
         this.lastProbe = now;
         // EME output reads as exact black even on bright frames; real dark scenes keep some signal.
         this.protectedBlack = video.mediaKeys && max <= 2 ? this.protectedBlack + 1 : 0;
-        if (this.protectedBlack >= PROTECTED_BLACK_PROBES) { this.enterProtected(); return null; }
+        if (this.protectedBlack >= PROTECTED_BLACK_PROBES) return this.enterProtected(settings);
       }
       // Suspected protected output: don't paint a black backdrop while confirming.
       if (this.protectedBlack > 0) return null;
@@ -189,7 +189,7 @@ export class FrameSource {
       return { canvas: this.visual, pixels: null, source: 'direct', detectorSafe: true, strips: this.readStrips(video, 0, 0, video.videoWidth, video.videoHeight, strips) };
     } catch {
       this.visual.width = width; this.probe.width = 16;
-      if (video.mediaKeys) { this.enterProtected(); return null; }
+      if (video.mediaKeys) return this.enterProtected(settings);
       this.unreadable = true;
       this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
       return null;
@@ -228,9 +228,16 @@ export class FrameSource {
     }
     return out;
   }
-  private enterProtected(): void {
+  private enterProtected(settings: Settings): null {
+    // Without the opt-in, protected video is unreadable as before the screenshot path existed.
+    if (!settings.drmWorkaround) {
+      this.unreadable = true;
+      this.status({ source: 'unavailable', message: i18n.t('status_pixels_unavailable') });
+      return null;
+    }
     this.protectedMode = true; this.nextCapture = 0; this.failureCount = 0;
     this.status({ source: 'compatibility', message: i18n.t('status_protected_sampling') });
+    return null;
   }
   /** Visible part of the video picture in viewport CSS pixels, or null when too small to sample. */
   private visibleVideoRect(): DOMRect | null {
