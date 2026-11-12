@@ -12,8 +12,6 @@ const AMBIENCE_INTERVAL: Record<Settings['ambienceRate'], number> = { performanc
 // frame nor the backdrop, so it must not restart sampling on every gesture step.
 // If screenshot compatibility capture returns, its detectorSafe check reads framing too.
 const EFFECT_KEYS = ['enabled', 'ambience', 'ambienceRate', 'ambienceFillBars', 'autoCrop', 'compatibility'] as const;
-// Protected video: the fill is part of the screenshot, so bar shrinkage is only visible on an unfilled capture.
-const BAR_RECHECK_MS = 45000;
 
 export class EffectsController {
   private settings: Settings = { ...DEFAULT_SETTINGS };
@@ -44,11 +42,8 @@ export class EffectsController {
   private barDepth = { w: 192, h: 108 };
   private lastBarDetection = 0;
   private barProtected = false;
-  /** Protected path: the fill is held off until an unfilled capture re-confirms the bars. */
-  private barVerify = false;
-  private barDisagreed = false;
-  private lastBarCheck = 0;
   private barSafe = false;
+  private lastRetract = '';
   constructor(private readonly binding: PlayerBinding, private readonly onCrop: (crop: Crop) => void, private readonly onStatus: (status: FeatureStatus) => void) {
     this.sourceUrl = binding.video.currentSrc;
     this.source = new FrameSource(binding, status => this.report(status)); this.ambience = new AmbienceRenderer(binding);
@@ -86,7 +81,7 @@ export class EffectsController {
   }
   private seeking = (): void => {
     this.tracker.clearCandidate(); this.source.invalidate(); this.generation++; this.staticDone = false;
-    this.bars.clearCandidate(); this.lastBarCheck = 0;
+    this.bars.clearCandidate();
   };
   // A new media resource may be readable even if the previous one tainted the canvas.
   private sourceChanged = (): void => { this.source.reset(); this.resetBars(); this.wake(); };
@@ -96,16 +91,26 @@ export class EffectsController {
     return s.enabled && s.ambience !== 'off' && s.ambienceFillBars && !s.autoCrop && this.ambience.available;
   }
   private resetBars(): void {
-    this.bars.reset(); this.barHistory.reset(); this.barFill.dispose(); this.barVerify = this.barDisagreed = false; this.lastBarCheck = 0;
+    this.bars.reset(); this.barHistory.reset(); this.barFill.dispose();
     if (this.barCanvas) this.barCanvas.width = this.barCanvas.height = 0;
     this.barCanvas = null; this.barCtx = null;
     this.debugBars();
   }
-  /** Fill region in source fractions: the detector keeps one boundary row, the fill covers every dark row. */
+  /**
+   * Fill region in source fractions. The detector keeps one boundary row (its last dark row).
+   * Direct frames show the real video under the fill, so the fill covers that row too. Protected
+   * screenshots include the fill itself, so the last two dark rows stay unfilled as a seam: picture
+   * appearing there is the only way a screenshot can show bars shrinking (IMAX opening up, a new
+   * clip). Two rows, because the screenshot crop can land one sample row off between captures.
+   */
   private barRegion(): Crop {
     const crop = this.bars.crop;
     if (!hasBars(crop)) return crop;
     const { w, h } = this.barDepth;
+    if (this.barProtected) return {
+      top: Math.max(0, crop.top - 1 / h), bottom: Math.max(0, crop.bottom - 1 / h),
+      left: Math.max(0, crop.left - 1 / w), right: Math.max(0, crop.right - 1 / w),
+    };
     return {
       top: crop.top && crop.top + 1 / h, bottom: crop.bottom && crop.bottom + 1 / h,
       left: crop.left && crop.left + 1 / w, right: crop.right && crop.right + 1 / w,
@@ -114,9 +119,8 @@ export class EffectsController {
   private syncBarFill(): void {
     if (!this.fillWanted()) { this.barFill.dispose(); return; }
     this.barFill.setBars(this.barRegion());
-    this.barFill.hold(this.barVerify);
   }
-  private detectBars(sample: Sample, now: number, peeking: boolean): void {
+  private detectBars(sample: Sample, now: number): void {
     this.barSafe = sample.detectorSafe;
     if (!sample.detectorSafe) return;
     const protectedFrame = sample.source === 'compatibility';
@@ -129,7 +133,7 @@ export class EffectsController {
     if (this.barCanvas.width !== w || this.barCanvas.height !== h) { this.barCanvas.width = w; this.barCanvas.height = h; }
     this.barCtx.drawImage(sample.canvas, 0, 0);
     const pixels = this.barCtx.getImageData(0, 0, w, h);
-    const accepted = this.bars.crop, filled = protectedFrame && this.barFill.visible;
+    const filled = protectedFrame && this.barFill.visible;
     // The screenshot shows our own fill where the bars were; restore them as black so the
     // detector still sees the accepted padding and can track bars that grow beyond it.
     if (filled) {
@@ -145,18 +149,31 @@ export class EffectsController {
     this.bars.maxGap = protectedFrame ? 4000 : 1400;
     const observation = this.barHistory.observe(pixels, now, protectedFrame);
     debugCount(observation ? 'barObservation' : 'barObservationNone');
-    if (this.barVerify && !filled) {
-      if (peeking) debugCount('barPeek');
-      if (observation && distance(observation.crop, accepted) < .015) {
-        this.barVerify = this.barDisagreed = false; this.bars.clearCandidate(); return;
+    // Ambiguous (dark scene, fade, black frame): keep the accepted bars, never create or remove them.
+    if (!observation) return;
+    const accepted = this.bars.crop, size = { top: h, bottom: h, left: w, right: w };
+    const shrunk = (['top', 'right', 'bottom', 'left'] as const).filter(edge => observation.crop[edge] < accepted[edge] - (filled ? 1.5 : .5) / size[edge]);
+    if (shrunk.length) {
+      // Picture where bars were: retract at once (growth still goes through hysteresis below).
+      debugCount('barRetract');
+      this.lastRetract = shrunk.join(',');
+      if (filled) {
+        // Picture opening up is centred, while player overlays (progress bar, captions) sit on one
+        // side: in a screenshot, retract only when both seams of a pair lit up.
+        const runs = this.barHistory.diagnostics.runs, lit = (edge: keyof Crop) => runs[edge] < accepted[edge] * size[edge] + 1 - 1.5;
+        if (!(accepted.top && lit('top') && lit('bottom') || accepted.left && lit('left') && lit('right'))) { debugCount('barRetractIgnored'); return; }
+        // Masked screenshot: only the seam is real, the true new extent is unknown. Drop the fill
+        // and the masked history; re-acquire from unfilled captures with normal hysteresis.
+        this.bars.reset(); this.barHistory.reset(); this.barFill.hold(true); this.barFill.setBars(EMPTY_CROP); this.barFill.hold(false);
+        return;
       }
-      // A dark/ambiguous re-check is inconclusive: keep the old fill and retry later, unless an
-      // earlier re-check already disagreed (then never cover possibly-new content).
-      if (!observation && !this.barDisagreed) { this.barVerify = false; return; }
-      if (observation) this.barDisagreed = true;
+      const next = { ...accepted };
+      for (const edge of shrunk) next[edge] = observation.crop[edge];
+      this.bars.setCrop(next);
+      return;
     }
     const next = this.bars.observe(observation, now);
-    if (next) { debugCount('barAccepted'); this.barVerify = this.barDisagreed = false; this.lastBarCheck = now; }
+    if (next) debugCount('barAccepted');
   }
   private wake = (): void => {
     if (this.disposed) return;
@@ -185,23 +202,12 @@ export class EffectsController {
       // Buffering/stalled media can keep the timer alive without producing new frames.
       if (this.sampledTime === video.currentTime) return;
       const fill = this.fillWanted();
-      let peeking = false;
-      // Protected path re-check: hide the fill for exactly the next capture (after a seek, then periodically).
-      if (fill && this.barProtected && this.barFill.visible && this.source.nextSampleDelay() === 0 && document.hasFocus()
-        && performance.now() - this.lastBarCheck >= (this.lastBarCheck ? BAR_RECHECK_MS : 0)) {
-        this.lastBarCheck = performance.now(); this.barVerify = true; peeking = true; this.barFill.hold(true);
-        // Two frames so the unfilled state is composited before the worker screenshots the tab.
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      }
       const sample = await this.source.sample(this.settings, this.crop, {
         readPixels: this.settings.autoCrop,
         // The detector needs real resolution; Colour mode alone would sample 32 px wide.
         width: this.settings.ambience === 'colour' && !fill ? 32 : 192,
       });
-      if (this.disposed || generation !== this.generation) {
-        if (peeking && !this.disposed) { this.barVerify = this.barDisagreed; this.syncBarFill(); }
-        return;
-      }
+      if (this.disposed || generation !== this.generation) return;
       const now = performance.now();
       if (sample) {
         this.sampledTime = video.currentTime;
@@ -211,12 +217,12 @@ export class EffectsController {
         }
         let ambienceCrop = sample.source === 'direct' ? this.crop : EMPTY_CROP;
         if (fill) {
-          this.detectBars(sample, now, peeking);
+          this.detectBars(sample, now);
           // Backdrop from content only: keeps black (or, in screenshots, our own fill) out of it.
           if (sample.detectorSafe) ambienceCrop = this.barRegion();
         }
         if (this.settings.ambience !== 'off') this.ambience.render(sample.canvas, sample.canvas.width, sample.canvas.height, ambienceCrop, now, sample.source === 'compatibility');
-      } else if (peeking) this.barVerify = this.barDisagreed;
+      }
       if (fill) { this.syncBarFill(); if (sample) this.barFill.paint(this.ambience.backdrop); this.debugBars(); }
       else this.barFill.dispose();
       // The transform engine owns visual interpolation. Do not ease the same
@@ -259,7 +265,7 @@ export class EffectsController {
     debugState({ barFill: {
       wanted: !this.disposed && this.fillWanted(), path: this.barProtected ? 'protected' : 'direct',
       bars: round(this.bars.crop), region: round(this.barRegion()), visible: this.barFill.visible, placed: this.barFill.placed,
-      verifying: this.barVerify, disagreed: this.barDisagreed, sample: `${this.barDepth.w}x${this.barDepth.h}`, safe: this.barSafe,
+      lastRetract: this.lastRetract, sample: `${this.barDepth.w}x${this.barDepth.h}`, safe: this.barSafe,
       diag: this.barHistory.diagnostics,
     } });
   }

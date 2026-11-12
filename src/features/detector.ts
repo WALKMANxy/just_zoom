@@ -153,9 +153,10 @@ export class BarHistory {
     this.frames.push({ at: now, content: centre >= .05, rows });
     while (this.frames.length > BAR_WINDOW_FRAMES || this.frames[0]!.at < now - BAR_WINDOW_MS) this.frames.shift();
     if (this.frames.filter(f => f.content).length < 3) return finish('few-content-frames', centre, null);
-    // Flat black compresses exactly even at low JPEG quality; ringing only reaches the boundary row,
-    // which the run then stops at. Screenshots still get a little more headroom.
-    const dark = quantised ? 22 : 20, boundary = dark + 12;
+    // Measured on a q10 screenshot of baked 2.39:1 bars: bar-row medians stay 0-1 (same as q50) and
+    // ringing only reaches the boundary row, so a tight dark test is safe; the limit is dim scenes,
+    // whose content medians sit around 25-30, hence the low boundary contrast.
+    const dark = quantised ? 16 : 14, boundary = dark + 10;
     const crop = { ...EMPTY_CROP };
     for (const edge of edges) {
       const n = rows[edge].length, depth = edge === 'top' || edge === 'bottom' ? h : w, peak = new Uint8Array(n);
