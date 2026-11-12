@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS, EMPTY_CROP, type Crop, type FeatureStatus, type PlayerBinding, type Settings } from '../shared/types';
 import { AmbienceRenderer } from './ambience';
 import { BarFill, hasBars } from './bar-fill';
-import { CropTracker, detectBorders, distance } from './detector';
+import { BarHistory, CropTracker, detectBorders, distance } from './detector';
 import { DEBUG, debugCount, debugState } from '../shared/debug';
 import { FrameSource, type Sample } from './frame-source';
 import { AUTO_CROP_AVAILABLE } from '../shared/features';
@@ -37,6 +37,7 @@ export class EffectsController {
   private statusValue: FeatureStatus = { source: 'idle', message: '' };
   // Bar fill: same detector and hysteresis as Auto Crop, own tracker so neither fights the other.
   private bars = new CropTracker();
+  private barHistory = new BarHistory();
   private barFill: BarFill;
   private barCanvas: HTMLCanvasElement | null = null;
   private barCtx: CanvasRenderingContext2D | null = null;
@@ -95,7 +96,7 @@ export class EffectsController {
     return s.enabled && s.ambience !== 'off' && s.ambienceFillBars && !s.autoCrop && this.ambience.available;
   }
   private resetBars(): void {
-    this.bars.reset(); this.barFill.dispose(); this.barVerify = this.barDisagreed = false; this.lastBarCheck = 0;
+    this.bars.reset(); this.barHistory.reset(); this.barFill.dispose(); this.barVerify = this.barDisagreed = false; this.lastBarCheck = 0;
     if (this.barCanvas) this.barCanvas.width = this.barCanvas.height = 0;
     this.barCanvas = null; this.barCtx = null;
     this.debugBars();
@@ -119,7 +120,7 @@ export class EffectsController {
     this.barSafe = sample.detectorSafe;
     if (!sample.detectorSafe) return;
     const protectedFrame = sample.source === 'compatibility';
-    if (protectedFrame !== this.barProtected) { this.barProtected = protectedFrame; this.bars.clearCandidate(); }
+    if (protectedFrame !== this.barProtected) { this.barProtected = protectedFrame; this.bars.clearCandidate(); this.barHistory.reset(); }
     if (!protectedFrame && now - this.lastBarDetection < 400) return;
     this.lastBarDetection = now;
     const { width: w, height: h } = sample.canvas;
@@ -142,7 +143,7 @@ export class EffectsController {
     }
     this.barDepth = { w, h };
     this.bars.maxGap = protectedFrame ? 4000 : 1400;
-    const observation = detectBorders(pixels);
+    const observation = this.barHistory.observe(pixels, now, protectedFrame);
     debugCount(observation ? 'barObservation' : 'barObservationNone');
     if (this.barVerify && !filled) {
       if (peeking) debugCount('barPeek');
@@ -259,6 +260,7 @@ export class EffectsController {
       wanted: !this.disposed && this.fillWanted(), path: this.barProtected ? 'protected' : 'direct',
       bars: round(this.bars.crop), region: round(this.barRegion()), visible: this.barFill.visible, placed: this.barFill.placed,
       verifying: this.barVerify, disagreed: this.barDisagreed, sample: `${this.barDepth.w}x${this.barDepth.h}`, safe: this.barSafe,
+      diag: this.barHistory.diagnostics,
     } });
   }
 }
