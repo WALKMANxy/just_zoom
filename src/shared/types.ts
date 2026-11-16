@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: true, animations: true, controlMode: 'both', buttonAction: 'zoom-in', buttonUseLast: true, buttonFactor: 1.34,
   zoomApplied: false, zoomType: 'factor', zoomStrategy: 'manual', allowPortrait: false,
   mode: 'fit', zoom: 1.34, panX: 0, panY: 0,
-  autoCrop: false, ambience: 'blur', ambienceRate: 'high', ambienceFillBars: false, drmWorkaround: true, compatibility: false,
+  autoCrop: false, ambience: 'blur', ambienceRate: 'high', ambienceFillBars: false, drmWorkaround: false, compatibility: false,
   rememberSiteState: true,
   videoFinderMode: 'treewalker',
   gesturesEnabled: true,

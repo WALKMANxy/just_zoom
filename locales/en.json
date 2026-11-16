@@ -62,7 +62,7 @@
   "controls_fill_bars": "Fill black bars",
   "controls_fill_bars_hint": "Paints Ambience into black bars baked into the video (letterbox or pillarbox). The picture itself is never covered.",
   "controls_drm_workaround": "Enable experimental DRM workaround",
-  "controls_drm_workaround_hint": "Uses local tab screenshots for protected video; only works while the tab is focused.",
+  "controls_drm_workaround_hint": "Uses local tab screenshots for protected video; only works while the tab is focused. Not compatible with NVIDIA RTX Video/RTX HDR: each screenshot makes the picture flicker.",
   "controls_gesture_tip": "Hold $1 + scroll to zoom, drag to pan",
   "controls_settings_button": "Extension settings…",
   "player_play": "Play",
